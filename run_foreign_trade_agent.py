@@ -1,12 +1,18 @@
 from pathlib import Path
 
 from agent.foreign_trade_agent import run_foreign_trade_agent
+from agent.result_parser import extract_reply_draft
+
 from llm.base import LLMProvider
 from llm.config import load_llm_config
 from llm.factory import create_llm_provider
+
 from mail_reader.agent_payload import build_agent_payload
 from mail_reader.config import load_mail_config
 from mail_reader.pipeline import read_latest_email
+
+from mail_writer.reply_builder import build_reply_message
+from mail_writer.draft_client import save_draft
 
 
 SKILL_PATH = Path(
@@ -18,15 +24,60 @@ RESULT_PATH = Path(
 )
 
 
+def create_reply_draft(
+    mail,
+    agent_result: str,
+    mail_config,
+    sender_email: str,
+) -> str:
+    """
+    Build a customer-facing reply from the validated
+    Foreign Trade Agent result and save it to Drafts.
+
+    Important:
+    This function saves a draft only.
+    It does NOT send email.
+    """
+
+    reply_body = extract_reply_draft(
+        agent_result
+    )
+
+    message = build_reply_message(
+        mail=mail,
+        sender_email=sender_email,
+        reply_body=reply_body,
+    )
+
+    drafts_mailbox = save_draft(
+        config=mail_config,
+        message=message,
+    )
+
+    return drafts_mailbox
+
+
 def run_once(
     provider: LLMProvider,
     mail_config,
     skill_path: Path,
     result_path: Path,
 ) -> str:
-    mail = read_latest_email(mail_config)
+    """
+    Read the latest email, run the Foreign Trade Agent,
+    and save the complete analysis result locally.
 
-    customer_email = build_agent_payload(mail)
+    At this stage this function does NOT automatically
+    create a mailbox draft yet.
+    """
+
+    mail = read_latest_email(
+        mail_config
+    )
+
+    customer_email = build_agent_payload(
+        mail
+    )
 
     result = run_foreign_trade_agent(
         provider=provider,
@@ -48,7 +99,31 @@ def run_once(
 
 
 def main() -> str:
+    """
+    Main entry point.
+
+    Current workflow:
+
+        IMAP
+          ↓
+        latest email
+          ↓
+        parse / normalize
+          ↓
+        build agent payload
+          ↓
+        LLM
+          ↓
+        output gate
+          ↓
+        result/latest_reply.md
+
+    Draft creation will be connected to main()
+    after the integration test is green.
+    """
+
     mail_config = load_mail_config()
+
     llm_config = load_llm_config()
 
     provider = create_llm_provider(
@@ -66,7 +141,10 @@ def main() -> str:
 if __name__ == "__main__":
     result = main()
 
-    print("\n=== Foreign Trade Agent Result ===\n")
+    print(
+        "\n=== Foreign Trade Agent Result ===\n"
+    )
+
     print(result)
 
     print(
