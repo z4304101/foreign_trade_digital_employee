@@ -10,6 +10,10 @@ from llm.factory import create_llm_provider
 from mail_reader.agent_payload import build_agent_payload
 from mail_reader.config import load_mail_config
 from mail_reader.pipeline import read_latest_email
+from mail_reader.processed_store import (
+    is_message_processed,
+    mark_message_processed,
+)
 
 from mail_writer.reply_builder import build_reply_message
 from mail_writer.draft_client import save_draft
@@ -21,6 +25,14 @@ SKILL_PATH = Path(
 
 RESULT_PATH = Path(
     "result/latest_reply.md"
+)
+
+PROCESSED_STORE_PATH = Path(
+    "runtime/processed_message_ids.txt"
+)
+
+SKIPPED_ALREADY_PROCESSED = (
+    "SKIPPED_ALREADY_PROCESSED"
 )
 
 
@@ -61,6 +73,7 @@ def run_once(
     skill_path: Path,
     result_path: Path,
     create_draft: bool = False,
+    processed_store_path: Path = PROCESSED_STORE_PATH,
 ) -> str:
     """
     Process the latest customer email once.
@@ -68,10 +81,14 @@ def run_once(
     Workflow:
 
         1. Read latest email
-        2. Build agent payload
-        3. Run Foreign Trade Agent
-        4. Save full analysis result
-        5. Optionally create a reply draft
+        2. Check Message-ID
+        3. Skip if already processed
+        4. Build agent payload
+        5. Run Foreign Trade Agent
+        6. Save full analysis result
+        7. Optionally create a reply draft
+        8. Mark Message-ID processed only after
+           the draft is saved successfully
 
     create_draft=False:
         analysis only
@@ -85,6 +102,18 @@ def run_once(
     mail = read_latest_email(
         mail_config
     )
+
+    message_id = getattr(
+        mail,
+        "message_id",
+        None,
+    )
+
+    if is_message_processed(
+        message_id=message_id,
+        store_path=processed_store_path,
+    ):
+        return SKIPPED_ALREADY_PROCESSED
 
     customer_email = build_agent_payload(
         mail
@@ -114,6 +143,14 @@ def run_once(
             sender_email=mail_config.email_user,
         )
 
+        # IMPORTANT:
+        # Only mark the message as processed AFTER
+        # the draft has been saved successfully.
+        mark_message_processed(
+            message_id=message_id,
+            store_path=processed_store_path,
+        )
+
     return result
 
 
@@ -125,6 +162,11 @@ def main() -> str:
 
         latest customer email
             ↓
+        Message-ID duplicate check
+            ↓
+        already processed?
+          YES → skip
+          NO  ↓
         DeepSeek analysis
             ↓
         Output Gate
@@ -136,6 +178,8 @@ def main() -> str:
         build email reply
             ↓
         save to mailbox Drafts
+            ↓
+        record Message-ID as processed
 
     No email is automatically sent.
     Human approval is still required.
@@ -161,25 +205,47 @@ def main() -> str:
 if __name__ == "__main__":
     result = main()
 
-    print(
-        "\n=== Foreign Trade Agent Result ===\n"
-    )
+    if result == SKIPPED_ALREADY_PROCESSED:
+        print(
+            "\n=== Foreign Trade Agent ===\n"
+        )
 
-    print(result)
+        print(
+            "Latest email has already been processed."
+        )
 
-    print(
-        "\nAnalysis saved to:",
-        RESULT_PATH.resolve(),
-    )
+        print(
+            "No AI request was made."
+        )
 
-    print(
-        "\nReply draft creation: ENABLED"
-    )
+        print(
+            "No duplicate draft was created."
+        )
 
-    print(
-        "IMPORTANT: The reply was saved as a draft only."
-    )
+    else:
+        print(
+            "\n=== Foreign Trade Agent Result ===\n"
+        )
 
-    print(
-        "No email was automatically sent."
-    )
+        print(result)
+
+        print(
+            "\nAnalysis saved to:",
+            RESULT_PATH.resolve(),
+        )
+
+        print(
+            "\nReply draft creation: ENABLED"
+        )
+
+        print(
+            "IMPORTANT: The reply was saved as a draft only."
+        )
+
+        print(
+            "No email was automatically sent."
+        )
+
+        print(
+            "Message-ID recorded as processed."
+        )

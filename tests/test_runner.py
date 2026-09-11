@@ -555,3 +555,430 @@ def test_main_enables_reply_draft_creation(
     assert calls["mail_config"] is fake_mail_config
 
     assert calls["create_draft"] is True
+def test_run_once_skips_already_processed_message(
+    tmp_path,
+    monkeypatch,
+):
+    import run_foreign_trade_agent as runner
+
+    from types import SimpleNamespace
+
+    fake_mail = SimpleNamespace(
+        message_id="<already-processed@example.com>",
+    )
+
+    fake_mail_config = SimpleNamespace(
+        email_user="sales@example.com",
+    )
+
+    fake_provider = object()
+
+    skill_path = tmp_path / "SKILL.md"
+    result_path = tmp_path / "latest_reply.md"
+    processed_store_path = (
+        tmp_path / "processed_message_ids.txt"
+    )
+
+    skill_path.write_text(
+        "TEST SKILL",
+        encoding="utf-8",
+    )
+
+    processed_store_path.write_text(
+        "<already-processed@example.com>\n",
+        encoding="utf-8",
+    )
+
+    calls = {
+        "agent": 0,
+        "draft": 0,
+    }
+
+    def fake_read_latest_email(config):
+        return fake_mail
+
+    def fake_build_agent_payload(mail):
+        return "CUSTOMER EMAIL PAYLOAD"
+
+    def fake_run_foreign_trade_agent(
+        provider,
+        skill_path,
+        customer_email,
+    ):
+        calls["agent"] += 1
+
+        return "SHOULD NOT RUN"
+
+    def fake_create_reply_draft(
+        mail,
+        agent_result,
+        mail_config,
+        sender_email,
+    ):
+        calls["draft"] += 1
+
+        return "Drafts"
+
+    monkeypatch.setattr(
+        runner,
+        "read_latest_email",
+        fake_read_latest_email,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "build_agent_payload",
+        fake_build_agent_payload,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "run_foreign_trade_agent",
+        fake_run_foreign_trade_agent,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "create_reply_draft",
+        fake_create_reply_draft,
+    )
+
+    result = runner.run_once(
+        provider=fake_provider,
+        mail_config=fake_mail_config,
+        skill_path=skill_path,
+        result_path=result_path,
+        create_draft=True,
+        processed_store_path=processed_store_path,
+    )
+
+    assert result == "SKIPPED_ALREADY_PROCESSED"
+
+    assert calls["agent"] == 0
+    assert calls["draft"] == 0
+
+    assert not result_path.exists()
+
+
+def test_run_once_marks_message_processed_after_draft_success(
+    tmp_path,
+    monkeypatch,
+):
+    import run_foreign_trade_agent as runner
+
+    from types import SimpleNamespace
+
+    fake_mail = SimpleNamespace(
+        message_id="<new-message@example.com>",
+    )
+
+    fake_mail_config = SimpleNamespace(
+        email_user="sales@example.com",
+    )
+
+    fake_provider = object()
+
+    skill_path = tmp_path / "SKILL.md"
+    result_path = tmp_path / "latest_reply.md"
+    processed_store_path = (
+        tmp_path / "processed_message_ids.txt"
+    )
+
+    skill_path.write_text(
+        "TEST SKILL",
+        encoding="utf-8",
+    )
+
+    agent_result = """
+## Customer Language
+
+English
+
+## Chinese Translation
+
+测试翻译
+
+## Customer Intent
+
+QUOTATION_REQUEST
+
+## Key Information
+
+Customer: Test Customer
+
+## Missing Information
+
+Price
+
+## Internal Verification Required
+
+Price
+
+## Risk Assessment
+
+Risk Level: MEDIUM
+
+## Recommended Action
+
+Verify internally.
+
+## Reply Draft
+
+Dear Customer,
+
+Thank you for your inquiry.
+
+Best regards,
+
+Sales Team
+
+## Chinese Back-Translation
+
+感谢您的询价。
+
+## Send Status
+
+WAITING_FOR_HUMAN_APPROVAL
+"""
+
+    call_order = []
+
+    def fake_read_latest_email(config):
+        return fake_mail
+
+    def fake_build_agent_payload(mail):
+        return "CUSTOMER EMAIL PAYLOAD"
+
+    def fake_run_foreign_trade_agent(
+        provider,
+        skill_path,
+        customer_email,
+    ):
+        call_order.append("agent")
+
+        return agent_result
+
+    def fake_create_reply_draft(
+        mail,
+        agent_result,
+        mail_config,
+        sender_email,
+    ):
+        call_order.append("draft")
+
+        return "Drafts"
+    def fake_mark_message_processed(
+        message_id,
+        store_path,
+    ):
+        call_order.append("mark")
+
+        store_path.write_text(
+            message_id + "\n",
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(
+        runner,
+        "read_latest_email",
+        fake_read_latest_email,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "build_agent_payload",
+        fake_build_agent_payload,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "run_foreign_trade_agent",
+        fake_run_foreign_trade_agent,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "create_reply_draft",
+        fake_create_reply_draft,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "mark_message_processed",
+        fake_mark_message_processed,
+        raising=False,
+    )
+
+    result = runner.run_once(
+        provider=fake_provider,
+        mail_config=fake_mail_config,
+        skill_path=skill_path,
+        result_path=result_path,
+        create_draft=True,
+        processed_store_path=processed_store_path,
+    )
+
+    assert result == agent_result
+
+    assert call_order == [
+        "agent",
+        "draft",
+        "mark",
+    ]
+
+    assert (
+        processed_store_path.read_text(
+            encoding="utf-8",
+        ).strip()
+        == "<new-message@example.com>"
+    )
+
+
+def test_run_once_does_not_mark_message_when_draft_fails(
+    tmp_path,
+    monkeypatch,
+):
+    import pytest
+    import run_foreign_trade_agent as runner
+
+    from types import SimpleNamespace
+
+    fake_mail = SimpleNamespace(
+        message_id="<draft-failure@example.com>",
+    )
+
+    fake_mail_config = SimpleNamespace(
+        email_user="sales@example.com",
+    )
+
+    fake_provider = object()
+
+    skill_path = tmp_path / "SKILL.md"
+    result_path = tmp_path / "latest_reply.md"
+    processed_store_path = (
+        tmp_path / "processed_message_ids.txt"
+    )
+
+    skill_path.write_text(
+        "TEST SKILL",
+        encoding="utf-8",
+    )
+
+    agent_result = """
+## Customer Language
+
+English
+
+## Chinese Translation
+
+测试翻译
+
+## Customer Intent
+
+QUOTATION_REQUEST
+
+## Key Information
+
+Customer: Test Customer
+
+## Missing Information
+
+Price
+
+## Internal Verification Required
+
+Price
+
+## Risk Assessment
+
+Risk Level: MEDIUM
+
+## Recommended Action
+
+Verify internally.
+
+## Reply Draft
+
+Dear Customer,
+
+Thank you for your inquiry.
+
+Best regards,
+
+Sales Team
+
+## Chinese Back-Translation
+
+感谢您的询价。
+
+## Send Status
+
+WAITING_FOR_HUMAN_APPROVAL
+"""
+
+    mark_calls = []
+
+    monkeypatch.setattr(
+        runner,
+        "read_latest_email",
+        lambda config: fake_mail,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "build_agent_payload",
+        lambda mail: "CUSTOMER EMAIL PAYLOAD",
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "run_foreign_trade_agent",
+        lambda provider, skill_path, customer_email:
+        agent_result,
+    )
+
+    def failing_create_reply_draft(
+        mail,
+        agent_result,
+        mail_config,
+        sender_email,
+    ):
+        raise RuntimeError(
+            "draft save failed"
+        )
+
+    monkeypatch.setattr(
+        runner,
+        "create_reply_draft",
+        failing_create_reply_draft,
+    )
+
+    def fake_mark_message_processed(
+        message_id,
+        store_path,
+    ):
+        mark_calls.append(message_id)
+
+    monkeypatch.setattr(
+        runner,
+        "mark_message_processed",
+        fake_mark_message_processed,
+        raising=False,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="draft save failed",
+    ):
+        runner.run_once(
+            provider=fake_provider,
+            mail_config=fake_mail_config,
+            skill_path=skill_path,
+            result_path=result_path,
+            create_draft=True,
+            processed_store_path=processed_store_path,
+        )
+
+    assert mark_calls == []
+
+    assert not processed_store_path.exists()
