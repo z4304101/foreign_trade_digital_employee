@@ -34,3 +34,80 @@ def test_mail_pipeline_fetches_and_parses_email(monkeypatch):
     assert mail.subject == "Inquiry for Model R2"
     assert "Model R2" in mail.body
     assert "20 units" in mail.body
+def test_read_recent_emails_fetches_and_parses_multiple_messages(
+    monkeypatch,
+):
+    import mail_reader.pipeline as pipeline
+
+    raw_email_1 = (
+        b"From: Alice <alice@example.com>\r\n"
+        b"To: sales@example.com\r\n"
+        b"Subject: Inquiry A\r\n"
+        b"Message-ID: <message-a@example.com>\r\n"
+        b"Content-Type: text/plain; charset=utf-8\r\n"
+        b"\r\n"
+        b"First inquiry"
+    )
+
+    raw_email_2 = (
+        b"From: Bob <bob@example.com>\r\n"
+        b"To: sales@example.com\r\n"
+        b"Subject: Inquiry B\r\n"
+        b"Message-ID: <message-b@example.com>\r\n"
+        b"Content-Type: text/plain; charset=utf-8\r\n"
+        b"\r\n"
+        b"Second inquiry"
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_recent_raw_emails",
+        lambda config, limit=20: [
+            raw_email_1,
+            raw_email_2,
+        ],
+        raising=False,
+    )
+
+    emails = pipeline.read_recent_emails(
+        config=object(),
+        limit=20,
+    )
+
+    assert len(emails) == 2
+
+    assert emails[0].sender == (
+        "Alice <alice@example.com>"
+    )
+    assert emails[0].subject == "Inquiry A"
+    assert emails[0].message_id == (
+        "<message-a@example.com>"
+    )
+
+    assert emails[1].sender == (
+        "Bob <bob@example.com>"
+    )
+    assert emails[1].subject == "Inquiry B"
+    assert emails[1].message_id == (
+        "<message-b@example.com>"
+    )
+
+
+def test_read_recent_emails_returns_empty_list(
+    monkeypatch,
+):
+    import mail_reader.pipeline as pipeline
+
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_recent_raw_emails",
+        lambda config, limit=20: [],
+        raising=False,
+    )
+
+    emails = pipeline.read_recent_emails(
+        config=object(),
+        limit=20,
+    )
+
+    assert emails == []
