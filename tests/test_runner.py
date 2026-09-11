@@ -112,6 +112,7 @@ def test_runner_processes_mail_and_writes_result(
     assert saved == VALID_RESULT
     assert result == VALID_RESULT
 
+
 def test_main_wires_configs_provider_and_runner(
     tmp_path,
     monkeypatch,
@@ -167,11 +168,13 @@ def test_main_wires_configs_provider_and_runner(
         mail_config,
         skill_path,
         result_path,
+        create_draft=False,
     ):
         calls["provider"] = provider
         calls["mail_config"] = mail_config
         calls["skill_path"] = skill_path
         calls["result_path"] = result_path
+        calls["create_draft"] = create_draft
 
         return "DONE"
 
@@ -188,6 +191,9 @@ def test_main_wires_configs_provider_and_runner(
     assert calls["mail_config"] is fake_mail_config
     assert calls["skill_path"] == skill_path
     assert calls["result_path"] == result_path
+    assert calls["create_draft"] is True
+
+
 def test_create_reply_draft_from_agent_result(
     monkeypatch,
 ):
@@ -331,3 +337,221 @@ WAITING_FOR_HUMAN_APPROVAL
     assert "Internal Verification Required" not in body
     assert "Chinese Back-Translation" not in body
     assert "WAITING_FOR_HUMAN_APPROVAL" not in body
+
+
+def test_run_once_creates_reply_draft_when_enabled(
+    tmp_path,
+    monkeypatch,
+):
+    import run_foreign_trade_agent as runner
+
+    from types import SimpleNamespace
+
+    fake_mail = object()
+
+    fake_mail_config = SimpleNamespace(
+        email_user="sales@example.com",
+    )
+
+    fake_provider = object()
+
+    skill_path = tmp_path / "SKILL.md"
+    result_path = tmp_path / "latest_reply.md"
+
+    skill_path.write_text(
+        "TEST SKILL",
+        encoding="utf-8",
+    )
+
+    agent_result = """
+## Customer Language
+
+English
+
+## Chinese Translation
+
+测试翻译
+
+## Customer Intent
+
+QUOTATION_REQUEST
+
+## Key Information
+
+Customer: Michael Brown
+
+## Missing Information
+
+Price
+
+## Internal Verification Required
+
+Price
+
+## Risk Assessment
+
+Risk Level: MEDIUM
+
+## Recommended Action
+
+Verify internally.
+
+## Reply Draft
+
+Dear Mr. Brown,
+
+Thank you for your inquiry.
+
+Best regards,
+
+Sales Team
+
+## Chinese Back-Translation
+
+感谢您的询价。
+
+## Send Status
+
+WAITING_FOR_HUMAN_APPROVAL
+"""
+
+    calls = {}
+
+    def fake_read_latest_email(config):
+        calls["read_config"] = config
+        return fake_mail
+
+    def fake_build_agent_payload(mail):
+        calls["payload_mail"] = mail
+        return "CUSTOMER EMAIL PAYLOAD"
+
+    def fake_run_foreign_trade_agent(
+        provider,
+        skill_path,
+        customer_email,
+    ):
+        calls["provider"] = provider
+        calls["skill_path"] = skill_path
+        calls["customer_email"] = customer_email
+
+        return agent_result
+
+    def fake_create_reply_draft(
+        mail,
+        agent_result,
+        mail_config,
+        sender_email,
+    ):
+        calls["draft_mail"] = mail
+        calls["draft_result"] = agent_result
+        calls["draft_config"] = mail_config
+        calls["sender_email"] = sender_email
+
+        return "Drafts"
+
+    monkeypatch.setattr(
+        runner,
+        "read_latest_email",
+        fake_read_latest_email,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "build_agent_payload",
+        fake_build_agent_payload,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "run_foreign_trade_agent",
+        fake_run_foreign_trade_agent,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "create_reply_draft",
+        fake_create_reply_draft,
+    )
+
+    result = runner.run_once(
+        provider=fake_provider,
+        mail_config=fake_mail_config,
+        skill_path=skill_path,
+        result_path=result_path,
+        create_draft=True,
+    )
+
+    assert result == agent_result
+
+    assert result_path.read_text(
+        encoding="utf-8",
+    ) == agent_result
+
+    assert calls["draft_mail"] is fake_mail
+    assert calls["draft_result"] == agent_result
+    assert calls["draft_config"] is fake_mail_config
+
+    assert (
+        calls["sender_email"]
+        == "sales@example.com"
+    )
+
+
+def test_main_enables_reply_draft_creation(
+    monkeypatch,
+):
+    import run_foreign_trade_agent as runner
+
+    fake_mail_config = object()
+    fake_llm_config = object()
+    fake_provider = object()
+
+    calls = {}
+
+    monkeypatch.setattr(
+        runner,
+        "load_mail_config",
+        lambda: fake_mail_config,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "load_llm_config",
+        lambda: fake_llm_config,
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "create_llm_provider",
+        lambda config: fake_provider,
+    )
+
+    def fake_run_once(
+        provider,
+        mail_config,
+        skill_path,
+        result_path,
+        create_draft=False,
+    ):
+        calls["provider"] = provider
+        calls["mail_config"] = mail_config
+        calls["skill_path"] = skill_path
+        calls["result_path"] = result_path
+        calls["create_draft"] = create_draft
+
+        return "RESULT"
+
+    monkeypatch.setattr(
+        runner,
+        "run_once",
+        fake_run_once,
+    )
+
+    result = runner.main()
+
+    assert result == "RESULT"
+
+    assert calls["provider"] is fake_provider
+    assert calls["mail_config"] is fake_mail_config
+
+    assert calls["create_draft"] is True

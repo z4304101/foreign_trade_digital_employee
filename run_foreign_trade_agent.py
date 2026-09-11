@@ -31,12 +31,10 @@ def create_reply_draft(
     sender_email: str,
 ) -> str:
     """
-    Build a customer-facing reply from the validated
-    Foreign Trade Agent result and save it to Drafts.
+    Extract the customer-facing reply from the validated
+    agent result, build an email reply, and save it to Drafts.
 
-    Important:
-    This function saves a draft only.
-    It does NOT send email.
+    This function DOES NOT send email.
     """
 
     reply_body = extract_reply_draft(
@@ -62,13 +60,26 @@ def run_once(
     mail_config,
     skill_path: Path,
     result_path: Path,
+    create_draft: bool = False,
 ) -> str:
     """
-    Read the latest email, run the Foreign Trade Agent,
-    and save the complete analysis result locally.
+    Process the latest customer email once.
 
-    At this stage this function does NOT automatically
-    create a mailbox draft yet.
+    Workflow:
+
+        1. Read latest email
+        2. Build agent payload
+        3. Run Foreign Trade Agent
+        4. Save full analysis result
+        5. Optionally create a reply draft
+
+    create_draft=False:
+        analysis only
+
+    create_draft=True:
+        analysis + save reply to Drafts
+
+    Email is NEVER automatically sent.
     """
 
     mail = read_latest_email(
@@ -95,31 +106,39 @@ def run_once(
         encoding="utf-8",
     )
 
+    if create_draft:
+        create_reply_draft(
+            mail=mail,
+            agent_result=result,
+            mail_config=mail_config,
+            sender_email=mail_config.email_user,
+        )
+
     return result
 
 
 def main() -> str:
     """
-    Main entry point.
+    Main application entry point.
 
-    Current workflow:
+    Production workflow:
 
-        IMAP
-          ↓
-        latest email
-          ↓
-        parse / normalize
-          ↓
-        build agent payload
-          ↓
-        LLM
-          ↓
-        output gate
-          ↓
-        result/latest_reply.md
+        latest customer email
+            ↓
+        DeepSeek analysis
+            ↓
+        Output Gate
+            ↓
+        save full analysis
+            ↓
+        extract Reply Draft
+            ↓
+        build email reply
+            ↓
+        save to mailbox Drafts
 
-    Draft creation will be connected to main()
-    after the integration test is green.
+    No email is automatically sent.
+    Human approval is still required.
     """
 
     mail_config = load_mail_config()
@@ -135,6 +154,7 @@ def main() -> str:
         mail_config=mail_config,
         skill_path=SKILL_PATH,
         result_path=RESULT_PATH,
+        create_draft=True,
     )
 
 
@@ -148,6 +168,18 @@ if __name__ == "__main__":
     print(result)
 
     print(
-        "\nSaved to:",
+        "\nAnalysis saved to:",
         RESULT_PATH.resolve(),
+    )
+
+    print(
+        "\nReply draft creation: ENABLED"
+    )
+
+    print(
+        "IMPORTANT: The reply was saved as a draft only."
+    )
+
+    print(
+        "No email was automatically sent."
     )
