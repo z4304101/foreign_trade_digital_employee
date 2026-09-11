@@ -3,11 +3,23 @@ import imaplib
 from mail_reader.config import MailConfig
 
 
+# Python imaplib does not register the IMAP ID extension
+# by default, so register it for the AUTH state.
 if "ID" not in imaplib.Commands:
     imaplib.Commands["ID"] = ("AUTH",)
 
 
-def _send_client_id(client: imaplib.IMAP4_SSL) -> None:
+def _send_client_id(
+    client: imaplib.IMAP4_SSL,
+) -> None:
+    """
+    Send IMAP ID information after login.
+
+    163 Mail may reject mailbox access with
+    "Unsafe Login" if the client does not send
+    the IMAP ID command before selecting INBOX.
+    """
+
     status, data = client._simple_command(
         "ID",
         '("name" "foreign-trade-digital-employee" '
@@ -21,7 +33,14 @@ def _send_client_id(client: imaplib.IMAP4_SSL) -> None:
         )
 
 
-def verify_imap_login(config: MailConfig) -> bool:
+def verify_imap_login(
+    config: MailConfig,
+) -> bool:
+    """
+    Verify that the configured mailbox can log in
+    and accept the IMAP ID command.
+    """
+
     client = imaplib.IMAP4_SSL(
         host=config.imap_host,
         port=config.imap_port,
@@ -33,7 +52,9 @@ def verify_imap_login(config: MailConfig) -> bool:
             config.auth_code,
         )
 
-        _send_client_id(client)
+        _send_client_id(
+            client
+        )
 
         return True
 
@@ -44,7 +65,14 @@ def verify_imap_login(config: MailConfig) -> bool:
             pass
 
 
-def fetch_latest_raw_email(config: MailConfig) -> bytes:
+def fetch_latest_raw_email(
+    config: MailConfig,
+) -> bytes:
+    """
+    Fetch the latest email from INBOX
+    without modifying its read/unread state.
+    """
+
     client = imaplib.IMAP4_SSL(
         host=config.imap_host,
         port=config.imap_port,
@@ -56,7 +84,10 @@ def fetch_latest_raw_email(config: MailConfig) -> bytes:
             config.auth_code,
         )
 
-        _send_client_id(client)
+        # Required by providers such as 163 Mail.
+        _send_client_id(
+            client
+        )
 
         status, _ = client.select(
             "INBOX",
@@ -76,6 +107,11 @@ def fetch_latest_raw_email(config: MailConfig) -> bytes:
         if status != "OK":
             raise RuntimeError(
                 "Unable to search mailbox"
+            )
+
+        if not data or not data[0]:
+            raise RuntimeError(
+                "Mailbox is empty"
             )
 
         message_ids = data[0].split()
@@ -98,11 +134,12 @@ def fetch_latest_raw_email(config: MailConfig) -> bytes:
             )
 
         for item in message_data:
-            if isinstance(item, tuple):
-                raw_email = item[1]
-
-                if isinstance(raw_email, bytes):
-                    return raw_email
+            if (
+                isinstance(item, tuple)
+                and len(item) >= 2
+                and isinstance(item[1], bytes)
+            ):
+                return item[1]
 
         raise RuntimeError(
             "Email body was not returned"
@@ -113,29 +150,42 @@ def fetch_latest_raw_email(config: MailConfig) -> bytes:
             client.logout()
         except Exception:
             pass
+
+
 def fetch_recent_raw_emails(
     config: MailConfig,
     limit: int = 20,
 ) -> list[bytes]:
     """
-    Fetch recent raw emails from INBOX.
+    Fetch multiple recent raw emails from INBOX.
 
-    The returned emails are ordered from oldest to newest
+    Emails are returned oldest -> newest
     within the selected recent window.
 
     Example:
-        INBOX message ids:
-            101, 102, 103, 104
+
+        INBOX:
+            101
+            102
+            103
+            104
 
         limit=2
 
         returns:
-            103, 104
+            103
+            104
+
+    This function opens INBOX in read-only mode
+    and does not intentionally change email flags.
     """
 
+    if limit <= 0:
+        return []
+
     client = imaplib.IMAP4_SSL(
-        config.imap_host,
-        config.imap_port,
+        host=config.imap_host,
+        port=config.imap_port,
     )
 
     try:
@@ -144,13 +194,21 @@ def fetch_recent_raw_emails(
             config.auth_code,
         )
 
+        # Important for real 163 Mail.
+        # Without this, SELECT may fail with:
+        # "EXAMINE Unsafe Login".
+        _send_client_id(
+            client
+        )
+
         status, _ = client.select(
-            "INBOX"
+            "INBOX",
+            readonly=True,
         )
 
         if status != "OK":
             raise RuntimeError(
-                "Failed to select INBOX"
+                "Unable to open INBOX in read-only mode"
             )
 
         status, data = client.search(
@@ -160,7 +218,7 @@ def fetch_recent_raw_emails(
 
         if status != "OK":
             raise RuntimeError(
-                "Failed to search INBOX"
+                "Unable to search mailbox"
             )
 
         if not data or not data[0]:
@@ -168,12 +226,14 @@ def fetch_recent_raw_emails(
 
         message_ids = data[0].split()
 
-        if limit > 0:
-            message_ids = message_ids[-limit:]
-        else:
+        if not message_ids:
             return []
 
-        raw_emails = []
+        message_ids = message_ids[
+            -limit:
+        ]
+
+        raw_emails: list[bytes] = []
 
         for message_id in message_ids:
             status, message_data = client.fetch(
@@ -183,7 +243,7 @@ def fetch_recent_raw_emails(
 
             if status != "OK":
                 raise RuntimeError(
-                    f"Failed to fetch email: "
+                    f"Unable to fetch email: "
                     f"{message_id!r}"
                 )
 
@@ -203,7 +263,7 @@ def fetch_recent_raw_emails(
 
             if raw_email is None:
                 raise RuntimeError(
-                    f"Email content missing: "
+                    f"Email body was not returned: "
                     f"{message_id!r}"
                 )
 

@@ -20,14 +20,40 @@ def test_fetch_recent_raw_emails_returns_oldest_to_newest(
             user,
             password,
         ):
-            return "OK", [b"logged in"]
+            return (
+                "OK",
+                [b"logged in"],
+            )
+
+        def _simple_command(
+            self,
+            command,
+            args,
+        ):
+            assert command == "ID"
+
+            assert (
+                "foreign-trade-digital-employee"
+                in args
+            )
+
+            return (
+                "OK",
+                [b"ID completed"],
+            )
 
         def select(
             self,
             mailbox,
+            readonly=False,
         ):
             assert mailbox == "INBOX"
-            return "OK", [b"3"]
+            assert readonly is True
+
+            return (
+                "OK",
+                [b"3"],
+            )
 
         def search(
             self,
@@ -50,9 +76,21 @@ def test_fetch_recent_raw_emails_returns_oldest_to_newest(
             assert query == "(RFC822)"
 
             messages = {
-                b"101": b"Subject: First\r\n\r\nFirst body",
-                b"102": b"Subject: Second\r\n\r\nSecond body",
-                b"103": b"Subject: Third\r\n\r\nThird body",
+                b"101": (
+                    b"Subject: First\r\n"
+                    b"\r\n"
+                    b"First body"
+                ),
+                b"102": (
+                    b"Subject: Second\r\n"
+                    b"\r\n"
+                    b"Second body"
+                ),
+                b"103": (
+                    b"Subject: Third\r\n"
+                    b"\r\n"
+                    b"Third body"
+                ),
             }
 
             return (
@@ -65,8 +103,13 @@ def test_fetch_recent_raw_emails_returns_oldest_to_newest(
                 ],
             )
 
-        def logout(self):
-            return "BYE", [b"logout"]
+        def logout(
+            self,
+        ):
+            return (
+                "BYE",
+                [b"logout"],
+            )
 
     monkeypatch.setattr(
         "mail_reader.imap_client.imaplib.IMAP4_SSL",
@@ -86,8 +129,16 @@ def test_fetch_recent_raw_emails_returns_oldest_to_newest(
     )
 
     assert emails == [
-        b"Subject: Second\r\n\r\nSecond body",
-        b"Subject: Third\r\n\r\nThird body",
+        (
+            b"Subject: Second\r\n"
+            b"\r\n"
+            b"Second body"
+        ),
+        (
+            b"Subject: Third\r\n"
+            b"\r\n"
+            b"Third body"
+        ),
     ]
 
 
@@ -105,30 +156,69 @@ def test_fetch_recent_raw_emails_returns_empty_when_inbox_empty(
             host,
             port,
         ):
-            pass
+            self.host = host
+            self.port = port
 
         def login(
             self,
             user,
             password,
         ):
-            return "OK", [b"logged in"]
+            return (
+                "OK",
+                [b"logged in"],
+            )
+
+        def _simple_command(
+            self,
+            command,
+            args,
+        ):
+            assert command == "ID"
+
+            assert (
+                "foreign-trade-digital-employee"
+                in args
+            )
+
+            return (
+                "OK",
+                [b"ID completed"],
+            )
 
         def select(
             self,
             mailbox,
+            readonly=False,
         ):
-            return "OK", [b"0"]
+            assert mailbox == "INBOX"
+            assert readonly is True
+
+            return (
+                "OK",
+                [b"0"],
+            )
 
         def search(
             self,
             charset,
             criterion,
         ):
-            return "OK", [b""]
+            assert charset is None
+            assert criterion == "ALL"
 
-        def logout(self):
-            return "BYE", [b"logout"]
+            return (
+                "OK",
+                [b""],
+            )
+
+        def logout(
+            self,
+        ):
+            return (
+                "BYE",
+                [b"logout"],
+            )
 
     monkeypatch.setattr(
         "mail_reader.imap_client.imaplib.IMAP4_SSL",
