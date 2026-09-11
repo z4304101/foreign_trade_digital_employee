@@ -125,6 +125,57 @@ def _validate_commercial_assumptions(
             )
 
 
+def _validate_discount_risk(
+    output: str,
+) -> None:
+    normalized_output = output.lower()
+
+    discount_markers = (
+        "quantity discount",
+        "special discount",
+        "discount request",
+        "requests a discount",
+        "requests a quantity discount",
+        "discount available",
+        "any discount",
+        "数量折扣",
+        "特殊折扣",
+        "折扣请求",
+        "是否有折扣",
+        "有无折扣",
+    )
+
+    has_discount_request = any(
+        marker in normalized_output
+        for marker in discount_markers
+    )
+
+    if not has_discount_request:
+        return
+
+    risk_assessment = _extract_section(
+        output,
+        "## Risk Assessment",
+    )
+
+    normalized_risk = re.sub(
+        r"[*`]",
+        "",
+        risk_assessment,
+    )
+
+    high_risk_match = re.search(
+        r"risk\s*level\s*:\s*high\b",
+        normalized_risk,
+        flags=re.IGNORECASE,
+    )
+
+    if not high_risk_match:
+        raise ValueError(
+            "discount request requires Risk Level: HIGH"
+        )
+
+
 def _validate_timing_commitments(
     output: str,
 ) -> None:
@@ -152,7 +203,35 @@ def _validate_timing_commitments(
             )
 
 
-def validate_agent_output(output: str) -> str:
+def _validate_send_status(
+    output: str,
+) -> None:
+    send_status = _extract_section(
+        output,
+        "## Send Status",
+    )
+
+    normalized_status = re.sub(
+        r"[*`]",
+        "",
+        send_status,
+    ).strip()
+
+    status_match = re.search(
+        r"\bWAITING_FOR_HUMAN_APPROVAL\b",
+        normalized_status,
+    )
+
+    if not status_match:
+        raise ValueError(
+            "Send Status must be "
+            "WAITING_FOR_HUMAN_APPROVAL"
+        )
+
+
+def validate_agent_output(
+    output: str,
+) -> str:
     if not isinstance(output, str) or not output.strip():
         raise ValueError(
             "Agent output must be a non-empty string"
@@ -165,26 +244,13 @@ def validate_agent_output(output: str) -> str:
             )
 
     _validate_historical_context(output)
+
     _validate_commercial_assumptions(output)
+
+    _validate_discount_risk(output)
+
     _validate_timing_commitments(output)
 
-    status_match = re.search(
-        r"## Send Status\s*\n+\s*([A-Z_]+)",
-        output,
-    )
-
-    if not status_match:
-        raise ValueError(
-            "Send Status must be "
-            "WAITING_FOR_HUMAN_APPROVAL"
-        )
-
-    status = status_match.group(1).strip()
-
-    if status != "WAITING_FOR_HUMAN_APPROVAL":
-        raise ValueError(
-            "Send Status must be "
-            "WAITING_FOR_HUMAN_APPROVAL"
-        )
+    _validate_send_status(output)
 
     return output
