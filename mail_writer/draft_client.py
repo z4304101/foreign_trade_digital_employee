@@ -1,5 +1,10 @@
+import imaplib
 import re
+from email import policy
+from email.message import EmailMessage
 from typing import Iterable
+
+from mail_reader.config import MailConfig
 
 
 def _parse_mailbox_line(
@@ -65,21 +70,9 @@ def find_drafts_mailbox(
     Find the Drafts mailbox from an IMAP LIST result.
 
     Priority:
-
     1. Mailbox explicitly marked with \\Drafts
     2. Standard mailbox names such as Drafts
     3. Raise ValueError if no drafts mailbox can be found
-
-    Important:
-    The actual mailbox name is returned unchanged.
-
-    For example, NetEase 163 may return:
-
-        (\\Drafts) "/" "&g0l6P3ux-"
-
-    In that case this function returns:
-
-        &g0l6P3ux-
     """
 
     parsed_mailboxes: list[
@@ -120,3 +113,102 @@ def find_drafts_mailbox(
     raise ValueError(
         "drafts mailbox not found"
     )
+
+
+def _status_is_ok(
+    status: str | bytes,
+) -> bool:
+    """
+    Normalize an IMAP status value.
+    """
+
+    if isinstance(status, bytes):
+        status = status.decode(
+            "ascii",
+            errors="ignore",
+        )
+
+    return str(status).upper() == "OK"
+
+
+def save_draft(
+    config: MailConfig,
+    message: EmailMessage,
+    client_factory=imaplib.IMAP4_SSL,
+) -> str:
+    """
+    Save an EmailMessage into the account's Drafts mailbox.
+
+    This function DOES NOT send email.
+
+    Workflow:
+        LOGIN
+        LIST
+        locate \\Drafts
+        APPEND with \\Draft flag
+        LOGOUT
+
+    Returns:
+        The actual IMAP drafts mailbox name.
+    """
+
+    if not isinstance(message, EmailMessage):
+        raise TypeError(
+            "message must be an EmailMessage"
+        )
+
+    client = client_factory(
+        config.imap_host,
+        config.imap_port,
+    )
+
+    try:
+        login_status, _ = client.login(
+            config.email_user,
+            config.auth_code,
+        )
+
+        if not _status_is_ok(login_status):
+            raise RuntimeError(
+                "IMAP login failed"
+            )
+
+        list_status, mailboxes = client.list()
+
+        if not _status_is_ok(list_status):
+            raise RuntimeError(
+                "failed to list IMAP mailboxes"
+            )
+
+        if not mailboxes:
+            raise ValueError(
+                "drafts mailbox not found"
+            )
+
+        drafts_mailbox = find_drafts_mailbox(
+            mailboxes
+        )
+
+        raw_message = message.as_bytes(
+            policy=policy.SMTP,
+        )
+
+        append_status, _ = client.append(
+            drafts_mailbox,
+            r"(\Draft)",
+            None,
+            raw_message,
+        )
+
+        if not _status_is_ok(append_status):
+            raise RuntimeError(
+                "failed to save draft"
+            )
+
+        return drafts_mailbox
+
+    finally:
+        try:
+            client.logout()
+        except Exception:
+            pass
