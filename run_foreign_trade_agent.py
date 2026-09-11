@@ -9,6 +9,9 @@ from llm.factory import create_llm_provider
 
 from mail_reader.agent_payload import build_agent_payload
 from mail_reader.config import load_mail_config
+from mail_reader.eligibility import (
+    is_customer_email_candidate,
+)
 from mail_reader.pipeline import (
     read_latest_email,
     read_recent_emails,
@@ -49,7 +52,7 @@ def create_reply_draft(
 ) -> str:
     """
     Extract the customer-facing Reply Draft,
-    build the reply email, and save it to Drafts.
+    build a reply email, and save it to Drafts.
 
     This function NEVER sends email.
     """
@@ -85,18 +88,25 @@ def process_mail(
     Process one ParsedEmail.
 
     Workflow:
-        Message-ID check
-        -> duplicate skip
-        -> build agent payload
-        -> AI analysis
-        -> save analysis
-        -> optionally save reply draft
-        -> mark Message-ID processed
 
-    Message-ID is recorded only after
-    draft creation succeeds.
+        1. Check Message-ID
+        2. Skip already processed email
+        3. Build AI input
+        4. Run Foreign Trade Agent
+        5. Save analysis result
+        6. Optionally create reply draft
+        7. Mark Message-ID processed
 
-    Email is NEVER automatically sent.
+    Important:
+
+        - Duplicate email:
+            no AI request
+            no duplicate draft
+
+        - Draft creation failure:
+            Message-ID is NOT recorded
+
+        - Email is NEVER automatically sent
     """
 
     message_id = getattr(
@@ -139,6 +149,8 @@ def process_mail(
             sender_email=mail_config.email_user,
         )
 
+        # Record the Message-ID only AFTER
+        # the draft was successfully saved.
         mark_message_processed(
             message_id=message_id,
             store_path=processed_store_path,
@@ -158,7 +170,7 @@ def run_once(
     """
     Single-email compatibility workflow.
 
-    Reads only the latest email and processes it.
+    Reads only the latest email.
     """
 
     mail = read_latest_email(
@@ -188,18 +200,41 @@ def run_batch(
     """
     Process multiple recent emails.
 
-    Emails are expected to arrive oldest -> newest.
+    Workflow for every email:
 
-    Every email is isolated:
-    one failure does not stop later emails.
+        recent email
+            |
+            v
+        customer candidate?
+            |
+        NO  -> skip
+            |
+        YES
+            |
+            v
+        process_mail()
+            |
+            +-> already processed -> skip
+            |
+            +-> new customer mail -> AI + draft
+            |
+            +-> exception -> failed
+
+    One failed email does not stop later emails.
 
     Returns:
+
         {
             "total": int,
             "processed": int,
             "skipped": int,
             "failed": int,
         }
+
+    For the current version, "skipped" includes:
+
+        - already processed messages
+        - system/security/verification/non-customer messages
     """
 
     mails = read_recent_emails(
@@ -215,6 +250,17 @@ def run_batch(
     }
 
     for mail in mails:
+        # Customer Email Gate
+        #
+        # Known system/security/verification messages
+        # must never be sent to the AI or turned into
+        # reply drafts.
+        if not is_customer_email_candidate(
+            mail
+        ):
+            summary["skipped"] += 1
+            continue
+
         try:
             result = process_mail(
                 mail=mail,
@@ -240,9 +286,10 @@ def run_batch(
 
 def main() -> str:
     """
-    Single-email application entry point.
+    Single-email entry point.
 
-    Kept for backward compatibility and existing tests.
+    Kept for backward compatibility
+    and existing tests.
     """
 
     mail_config = load_mail_config()
@@ -267,8 +314,9 @@ def batch_main() -> dict[str, int]:
     Production batch entry point.
 
     Scan recent emails,
+    ignore known non-customer messages,
     skip already processed Message-IDs,
-    process every remaining email,
+    process new customer emails,
     create reply drafts,
     and return a summary.
 

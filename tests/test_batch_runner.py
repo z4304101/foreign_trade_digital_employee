@@ -296,3 +296,92 @@ def test_batch_main_wires_configs_provider_and_batch_runner(
 
     assert calls["limit"] == 20
     assert calls["create_draft"] is True
+from types import SimpleNamespace
+
+
+def test_run_batch_ignores_non_customer_email(
+    tmp_path,
+    monkeypatch,
+):
+    import run_foreign_trade_agent as runner
+
+    system_mail = SimpleNamespace(
+        message_id="<system@example.com>",
+        sender=(
+            "System <noreply@example.com>"
+        ),
+        subject="Security Alert",
+    )
+
+    customer_mail = SimpleNamespace(
+        message_id="<customer@example.com>",
+        sender=(
+            "David Miller "
+            "<david@nova-automation.com>"
+        ),
+        subject="RFQ for Model R2",
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "read_recent_emails",
+        lambda config, limit=20: [
+            system_mail,
+            customer_mail,
+        ],
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "is_customer_email_candidate",
+        lambda mail: (
+            mail is customer_mail
+        ),
+        raising=False,
+    )
+
+    processed = []
+
+    def fake_process_mail(
+        mail,
+        provider,
+        mail_config,
+        skill_path,
+        result_path,
+        processed_store_path,
+        create_draft=True,
+    ):
+        processed.append(
+            mail.message_id
+        )
+
+        return "RESULT"
+
+    monkeypatch.setattr(
+        runner,
+        "process_mail",
+        fake_process_mail,
+    )
+
+    summary = runner.run_batch(
+        provider=object(),
+        mail_config=object(),
+        skill_path=tmp_path / "SKILL.md",
+        result_path=tmp_path / "latest_reply.md",
+        processed_store_path=(
+            tmp_path / "processed_message_ids.txt"
+        ),
+        limit=20,
+        create_draft=True,
+    )
+
+    assert processed == [
+        "<customer@example.com>",
+    ]
+
+    assert summary == {
+        "total": 2,
+        "processed": 1,
+        "skipped": 1,
+        "failed": 0,
+    }
