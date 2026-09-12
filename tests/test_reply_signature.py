@@ -55,6 +55,8 @@ Best regards,
         "Thank you for your inquiry regarding Model R2."
         in result
     )
+
+
 def test_apply_sender_signature_replaces_generic_sales_team():
     from mail_writer.signature import (
         apply_sender_signature,
@@ -85,8 +87,43 @@ Sales Team
     )
 
     assert result.rstrip().endswith(
-    "Best regards,\n"
-    "Zhao Xin\n"
-    "营销总监\n"
-    "启智（芜湖）智能机器人有限公司"
-)
+        "Best regards,\n"
+        "Zhao Xin\n"
+        "营销总监\n"
+        "启智（芜湖）智能机器人有限公司"
+    )
+
+
+def test_apply_sender_signature_completes_partial_sender_signature():
+    from mail_writer.signature import (
+        apply_sender_signature,
+    )
+
+    draft = """Dear Mr. Silva,
+
+Thank you for your inquiry regarding Model R2.
+
+Best regards,
+Zhao Xin
+"""
+
+    result = apply_sender_signature(
+        draft=draft,
+        sender_name="Zhao Xin",
+        sender_title="营销总监",
+        sender_company="启智（芜湖）智能机器人有限公司",
+    )
+
+    assert "Zhao Xin" in result
+    assert "营销总监" in result
+    assert (
+        "启智（芜湖）智能机器人有限公司"
+        in result
+    )
+
+    assert result.rstrip().endswith(
+        "Best regards,\n"
+        "Zhao Xin\n"
+        "营销总监\n"
+        "启智（芜湖）智能机器人有限公司"
+    )
