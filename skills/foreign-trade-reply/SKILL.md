@@ -148,6 +148,114 @@ If referenced, it MUST be explicitly labeled as historical context.
 
 Historical context MUST NOT appear as confirmed current facts
 inside Key Information.
+## 2A. Customer and Company Identity
+
+Customer and Company are different identity fields.
+
+Customer = human contact person
+
+Company = organization
+
+The model MUST distinguish the individual contact person from
+the organization that person represents.
+
+When extracting Customer and Company, use information from the
+Current Message only.
+
+Prefer the current message signature when identifying the
+customer's human name and company.
+
+A current message signature may contain:
+
+- human name
+- job title
+- department
+- company name
+- contact information
+
+Example current message signature:
+
+Daniel Martin
+Purchasing Manager
+EuroTech Automation
+
+The correct extraction is:
+
+Customer: Daniel Martin
+
+Company: EuroTech Automation
+
+The job title:
+
+Purchasing Manager
+
+MUST NOT be used as either Customer or Company.
+
+Do not use the company name as Customer.
+
+Incorrect:
+
+Customer: EuroTech Automation
+Company: Not specified
+
+Correct:
+
+Customer: Daniel Martin
+Company: EuroTech Automation
+
+If the Current Message clearly provides a human contact name
+but does not provide a company name:
+
+Customer: <human contact person>
+Company: Not specified
+
+If the Current Message clearly provides a company name but
+does not provide a human contact name:
+
+Customer: Not specified
+Company: <organization>
+
+If neither a human contact name nor a company name is clearly
+provided in the Current Message:
+
+Customer: Not specified
+Company: Not specified
+
+Do not invent a human name from:
+
+- an email address
+- an email username
+- an email domain
+- a job title
+- a department
+- a company name
+
+Do not invent a company name from an email domain unless the
+company is explicitly identified in the Current Message.
+
+If the From display name and the current message signature
+contain different identities, prefer the current message signature
+for Customer and Company extraction.
+
+If the identity conflict could matter for commercial decisions,
+fraud risk, payment, quotation, contract, or account verification,
+mention the discrepancy in Risk Assessment or Recommended Action
+for human review.
+
+A signature contained only inside the Previous Thread is historical
+context and MUST NOT be used as the current Customer or Company.
+
+Do not use historical signatures to fill missing current identity
+fields.
+
+For example, if the Previous Thread contains:
+
+Michael Brown
+Baltic Automation GmbH
+
+but the Current Message does not identify Michael Brown or
+Baltic Automation GmbH, do not use those historical identities
+as current Customer or Company facts.
 
 
 ## 3. Never Guess Commercial Facts
