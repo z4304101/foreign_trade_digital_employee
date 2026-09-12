@@ -25,6 +25,11 @@ from mail_writer.reply_builder import build_reply_message
 from mail_writer.draft_client import save_draft
 from mail_writer.signature import apply_sender_signature
 
+from wecom.notifier import (
+    build_inquiry_notification,
+    send_wecom_text,
+)
+
 
 SKILL_PATH = Path(
     "skills/foreign-trade-reply/SKILL.md"
@@ -213,6 +218,7 @@ def process_mail(
     result_path: Path,
     processed_store_path: Path = PROCESSED_STORE_PATH,
     create_draft: bool = False,
+    wecom_config=None,
 ) -> str:
     """
     Process one ParsedEmail.
@@ -227,6 +233,7 @@ def process_mail(
         6. Save independent history record
         7. Optionally create reply draft
         8. Mark Message-ID processed
+        9. Optionally notify WeCom
 
     Important:
 
@@ -236,6 +243,9 @@ def process_mail(
 
         - Draft creation failure:
             Message-ID is NOT recorded
+
+        - WeCom notification happens only
+          after draft creation and Message-ID marking
 
         - Email is NEVER automatically sent
     """
@@ -295,6 +305,41 @@ def process_mail(
             message_id=message_id,
             store_path=processed_store_path,
         )
+
+        # WeCom is a secondary notification channel.
+        #
+        # The order must remain:
+        #
+        # draft saved
+        #     ↓
+        # Message-ID recorded
+        #     ↓
+        # WeCom notification
+        #
+        # This prevents WeCom problems from
+        # creating duplicate reply drafts.
+        if (
+            wecom_config is not None
+            and getattr(
+                wecom_config,
+                "enabled",
+                False,
+            )
+        ):
+            notification = (
+                build_inquiry_notification(
+                    mail
+                )
+            )
+
+            send_wecom_text(
+                webhook_url=getattr(
+                    wecom_config,
+                    "webhook_url",
+                    "",
+                ),
+                content=notification,
+            )
 
     return result
 
