@@ -247,6 +247,9 @@ def process_mail(
         - WeCom notification happens only
           after draft creation and Message-ID marking
 
+        - WeCom failure must NOT break
+          the email processing workflow
+
         - Email is NEVER automatically sent
     """
 
@@ -306,9 +309,9 @@ def process_mail(
             store_path=processed_store_path,
         )
 
-        # WeCom is a secondary notification channel.
+        # WeCom is only a secondary notification channel.
         #
-        # The order must remain:
+        # The order is intentionally:
         #
         # draft saved
         #     ↓
@@ -316,8 +319,8 @@ def process_mail(
         #     ↓
         # WeCom notification
         #
-        # This prevents WeCom problems from
-        # creating duplicate reply drafts.
+        # Any WeCom failure must stay isolated
+        # from the email workflow.
         if (
             wecom_config is not None
             and getattr(
@@ -326,23 +329,29 @@ def process_mail(
                 False,
             )
         ):
-            notification = (
-                build_inquiry_notification(
-                    mail
+            try:
+                notification = (
+                    build_inquiry_notification(
+                        mail
+                    )
                 )
-            )
 
-            send_wecom_text(
-                webhook_url=getattr(
-                    wecom_config,
-                    "webhook_url",
-                    "",
-                ),
-                content=notification,
-            )
+                send_wecom_text(
+                    webhook_url=getattr(
+                        wecom_config,
+                        "webhook_url",
+                        "",
+                    ),
+                    content=notification,
+                )
+
+            except Exception:
+                # WeCom notification is optional.
+                # Never fail or repeat customer email
+                # processing because WeCom is unavailable.
+                pass
 
     return result
-
 
 def run_once(
     provider: LLMProvider,
