@@ -353,6 +353,7 @@ def process_mail(
 
     return result
 
+
 def run_once(
     provider: LLMProvider,
     mail_config,
@@ -390,6 +391,7 @@ def run_batch(
     processed_store_path: Path = PROCESSED_STORE_PATH,
     limit: int = BATCH_LIMIT,
     create_draft: bool = True,
+    wecom_config=None,
 ) -> dict[str, int]:
     """
     Process multiple recent emails.
@@ -416,6 +418,7 @@ def run_batch(
             |       +-> latest result
             |       +-> history record
             |       +-> draft
+            |       +-> optional WeCom notification
             |
             +-> exception -> failed
 
@@ -461,14 +464,25 @@ def run_batch(
             continue
 
         try:
+            process_kwargs = {
+                "mail": mail,
+                "provider": provider,
+                "mail_config": mail_config,
+                "skill_path": skill_path,
+                "result_path": result_path,
+                "processed_store_path": processed_store_path,
+                "create_draft": create_draft,
+            }
+
+            # Keep backward compatibility when
+            # WeCom is not configured.
+            if wecom_config is not None:
+                process_kwargs[
+                    "wecom_config"
+                ] = wecom_config
+
             result = process_mail(
-                mail=mail,
-                provider=provider,
-                mail_config=mail_config,
-                skill_path=skill_path,
-                result_path=result_path,
-                processed_store_path=processed_store_path,
-                create_draft=create_draft,
+                **process_kwargs
             )
 
         except Exception:
@@ -508,7 +522,9 @@ def main() -> str:
     )
 
 
-def batch_main() -> dict[str, int]:
+def batch_main(
+    wecom_config=None,
+) -> dict[str, int]:
     """
     Production batch entry point.
 
@@ -518,6 +534,7 @@ def batch_main() -> dict[str, int]:
     process new customer emails,
     save independent analysis history,
     create reply drafts,
+    optionally notify WeCom,
     and return a summary.
 
     Email is NEVER automatically sent.
@@ -531,14 +548,25 @@ def batch_main() -> dict[str, int]:
         config=llm_config,
     )
 
+    batch_kwargs = {
+        "provider": provider,
+        "mail_config": mail_config,
+        "skill_path": SKILL_PATH,
+        "result_path": RESULT_PATH,
+        "processed_store_path": PROCESSED_STORE_PATH,
+        "limit": BATCH_LIMIT,
+        "create_draft": True,
+    }
+
+    # Keep old behavior unchanged when
+    # WeCom is not configured.
+    if wecom_config is not None:
+        batch_kwargs[
+            "wecom_config"
+        ] = wecom_config
+
     return run_batch(
-        provider=provider,
-        mail_config=mail_config,
-        skill_path=SKILL_PATH,
-        result_path=RESULT_PATH,
-        processed_store_path=PROCESSED_STORE_PATH,
-        limit=BATCH_LIMIT,
-        create_draft=True,
+        **batch_kwargs
     )
 
 
