@@ -44,6 +44,108 @@ SKIPPED_ALREADY_PROCESSED = (
 BATCH_LIMIT = 20
 
 
+def _make_history_filename(
+    mail,
+) -> str:
+    """
+    Build a filesystem-safe history filename
+    from the email Message-ID.
+    """
+
+    message_id = getattr(
+        mail,
+        "message_id",
+        "",
+    ) or "unknown-message"
+
+    safe_name = "".join(
+        char
+        if char.isalnum()
+        or char in ("-", "_")
+        else "_"
+        for char in message_id
+    )
+
+    safe_name = safe_name.strip("_")
+
+    if not safe_name:
+        safe_name = "unknown-message"
+
+    return f"{safe_name}.md"
+
+
+def save_analysis_history(
+    mail,
+    result: str,
+    result_path: Path,
+) -> Path:
+    """
+    Save an independent analysis history record
+    for one customer email.
+
+    History directory:
+
+        result/history/
+
+    Each email gets its own Markdown file.
+    """
+
+    history_dir = (
+        result_path.parent / "history"
+    )
+
+    history_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    history_path = (
+        history_dir
+        / _make_history_filename(mail)
+    )
+
+    sender = getattr(
+        mail,
+        "sender",
+        "",
+    )
+
+    subject = getattr(
+        mail,
+        "subject",
+        "",
+    )
+
+    date = getattr(
+        mail,
+        "date",
+        "",
+    )
+
+    message_id = getattr(
+        mail,
+        "message_id",
+        "",
+    )
+
+    history_content = (
+        "# Foreign Trade Email Analysis\n\n"
+        f"Message-ID: {message_id}\n\n"
+        f"From: {sender}\n\n"
+        f"Subject: {subject}\n\n"
+        f"Date: {date}\n\n"
+        "---\n\n"
+        f"{result}"
+    )
+
+    history_path.write_text(
+        history_content,
+        encoding="utf-8",
+    )
+
+    return history_path
+
+
 def create_reply_draft(
     mail,
     agent_result: str,
@@ -93,9 +195,10 @@ def process_mail(
         2. Skip already processed email
         3. Build AI input
         4. Run Foreign Trade Agent
-        5. Save analysis result
-        6. Optionally create reply draft
-        7. Mark Message-ID processed
+        5. Save latest analysis result
+        6. Save independent history record
+        7. Optionally create reply draft
+        8. Mark Message-ID processed
 
     Important:
 
@@ -136,9 +239,18 @@ def process_mail(
         exist_ok=True,
     )
 
+    # Keep the latest analysis for convenience.
     result_path.write_text(
         result,
         encoding="utf-8",
+    )
+
+    # Also keep an independent history record
+    # for this specific customer email.
+    save_analysis_history(
+        mail=mail,
+        result=result,
+        result_path=result_path,
     )
 
     if create_draft:
@@ -216,7 +328,12 @@ def run_batch(
             |
             +-> already processed -> skip
             |
-            +-> new customer mail -> AI + draft
+            +-> new customer mail
+            |       |
+            |       +-> AI analysis
+            |       +-> latest result
+            |       +-> history record
+            |       +-> draft
             |
             +-> exception -> failed
 
@@ -317,6 +434,7 @@ def batch_main() -> dict[str, int]:
     ignore known non-customer messages,
     skip already processed Message-IDs,
     process new customer emails,
+    save independent analysis history,
     create reply drafts,
     and return a summary.
 

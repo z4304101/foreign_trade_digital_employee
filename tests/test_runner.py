@@ -982,3 +982,100 @@ WAITING_FOR_HUMAN_APPROVAL
     assert mark_calls == []
 
     assert not processed_store_path.exists()
+def test_process_mail_writes_independent_history_file(
+    tmp_path,
+    monkeypatch,
+):
+    import run_foreign_trade_agent as runner
+
+    from mail_reader.parser import ParsedEmail
+
+    fake_mail = ParsedEmail(
+        sender="Alex <alex@example.com>",
+        subject="Inquiry for Model R2",
+        date="Fri, 11 Sep 2026 15:40:28 +0800",
+        body="Please quote 20 units of Model R2.",
+        message_id="<history-001@example.com>",
+    )
+
+    skill_path = tmp_path / "SKILL.md"
+
+    skill_path.write_text(
+        "FOREIGN TRADE SKILL RULES",
+        encoding="utf-8",
+    )
+
+    result_path = (
+        tmp_path / "latest_reply.md"
+    )
+
+    processed_store_path = (
+        tmp_path / "processed_message_ids.txt"
+    )
+
+    def fake_run_foreign_trade_agent(
+        provider,
+        skill_path,
+        customer_email,
+    ):
+        return VALID_RESULT
+
+    monkeypatch.setattr(
+        runner,
+        "run_foreign_trade_agent",
+        fake_run_foreign_trade_agent,
+    )
+
+    result = runner.process_mail(
+        mail=fake_mail,
+        provider=object(),
+        mail_config=object(),
+        skill_path=skill_path,
+        result_path=result_path,
+        processed_store_path=processed_store_path,
+        create_draft=False,
+    )
+
+    assert result == VALID_RESULT
+
+    # latest_reply.md must still exist
+    assert result_path.exists()
+
+    assert result_path.read_text(
+        encoding="utf-8",
+    ) == VALID_RESULT
+
+    # Every processed email must also have
+    # its own independent history record.
+    history_dir = (
+        tmp_path / "history"
+    )
+
+    history_files = list(
+        history_dir.glob("*.md")
+    )
+
+    assert len(history_files) == 1
+
+    history_text = history_files[
+        0
+    ].read_text(
+        encoding="utf-8",
+    )
+
+    assert (
+        "<history-001@example.com>"
+        in history_text
+    )
+
+    assert (
+        "Alex <alex@example.com>"
+        in history_text
+    )
+
+    assert (
+        "Inquiry for Model R2"
+        in history_text
+    )
+
+    assert VALID_RESULT in history_text
