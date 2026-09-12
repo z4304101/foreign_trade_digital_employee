@@ -25,6 +25,7 @@ from mail_writer.reply_builder import build_reply_message
 from mail_writer.draft_client import save_draft
 from mail_writer.signature import apply_sender_signature
 
+from wecom.config import load_wecom_config
 from wecom.notifier import (
     build_inquiry_notification,
     send_wecom_text,
@@ -570,8 +571,27 @@ def batch_main(
     )
 
 
+def run_production() -> dict[str, int]:
+    """
+    Production entry point.
+
+    Load optional WeCom configuration
+    and run the normal batch workflow.
+
+    If WECOM_WEBHOOK_URL is missing,
+    WeCom remains disabled and email
+    processing continues normally.
+    """
+
+    wecom_config = load_wecom_config()
+
+    return batch_main(
+        wecom_config=wecom_config,
+    )
+
+
 if __name__ == "__main__":
-    summary = batch_main()
+    summary = run_production()
 
     print(
         "\n=== Foreign Trade Digital Employee ===\n"
