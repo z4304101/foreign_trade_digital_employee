@@ -23,6 +23,7 @@ from mail_reader.processed_store import (
 
 from mail_writer.reply_builder import build_reply_message
 from mail_writer.draft_client import save_draft
+from mail_writer.signature import apply_sender_signature
 
 
 SKILL_PATH = Path(
@@ -154,13 +155,40 @@ def create_reply_draft(
 ) -> str:
     """
     Extract the customer-facing Reply Draft,
-    build a reply email, and save it to Drafts.
+    apply the configured sender signature,
+    build a reply email,
+    and save it to Drafts.
 
     This function NEVER sends email.
     """
 
     reply_body = extract_reply_draft(
         agent_result
+    )
+
+    sender_name = getattr(
+        mail_config,
+        "sender_name",
+        "",
+    )
+
+    sender_title = getattr(
+        mail_config,
+        "sender_title",
+        "",
+    )
+
+    sender_company = getattr(
+        mail_config,
+        "sender_company",
+        "",
+    )
+
+    reply_body = apply_sender_signature(
+        draft=reply_body,
+        sender_name=sender_name,
+        sender_title=sender_title,
+        sender_company=sender_company,
     )
 
     message = build_reply_message(
