@@ -1,5 +1,9 @@
 from pathlib import Path
 
+from history_learning.context import HistoryContextLoader
+from history_learning.service import sync_sent_incremental
+from history_learning.store import HistoryStore
+
 from agent.foreign_trade_agent import run_foreign_trade_agent
 from agent.result_parser import extract_reply_draft
 
@@ -42,6 +46,10 @@ RESULT_PATH = Path(
 
 PROCESSED_STORE_PATH = Path(
     "runtime/processed_message_ids.txt"
+)
+
+HISTORY_DB_PATH = Path(
+    "runtime/history_learning.db"
 )
 
 SKIPPED_ALREADY_PROCESSED = (
@@ -420,6 +428,7 @@ def run_batch(
     limit: int = BATCH_LIMIT,
     create_draft: bool = True,
     wecom_config=None,
+    history_context_loader=None,
 ) -> dict[str, int]:
     """
     Process multiple recent emails.
@@ -509,6 +518,14 @@ def run_batch(
                     "wecom_config"
                 ] = wecom_config
 
+            # History learning is optional.
+            # Preserve the original process_mail()
+            # call shape when it is unavailable.
+            if history_context_loader is not None:
+                process_kwargs[
+                    "history_context_loader"
+                ] = history_context_loader
+
             result = process_mail(
                 **process_kwargs
             )
@@ -576,6 +593,69 @@ def batch_main(
         config=llm_config,
     )
 
+    history_context_loader = None
+
+    # History learning is opt-in.
+    #
+    # Production MUST NOT silently perform the
+    # initial six-month mailbox scan.
+    #
+    # History is enabled only after the user has
+    # explicitly completed initial learning.
+    if HISTORY_DB_PATH.exists():
+        history_store = None
+
+        try:
+            history_store = HistoryStore(
+                HISTORY_DB_PATH
+            )
+            history_store.initialize()
+
+            history_state = (
+                history_store.get_learning_state()
+            )
+
+            history_initialized = (
+                history_state.get(
+                    "initial_learning_completed",
+                    "",
+                )
+                == "true"
+            )
+
+        except Exception:
+            # History storage must never block the
+            # normal customer-mail workflow.
+            history_initialized = False
+            history_store = None
+
+        if (
+            history_initialized
+            and history_store is not None
+        ):
+            # First learn any final replies that the
+            # user actually sent since the last sync.
+            #
+            # Failure here is isolated. Existing
+            # historical memory remains usable.
+            try:
+                sync_sent_incremental(
+                    mail_config=mail_config,
+                    provider=provider,
+                    store=history_store,
+                )
+            except Exception:
+                pass
+
+            try:
+                history_context_loader = (
+                    HistoryContextLoader(
+                        history_store
+                    )
+                )
+            except Exception:
+                history_context_loader = None
+
     batch_kwargs = {
         "provider": provider,
         "mail_config": mail_config,
@@ -592,6 +672,11 @@ def batch_main(
         batch_kwargs[
             "wecom_config"
         ] = wecom_config
+
+    if history_context_loader is not None:
+        batch_kwargs[
+            "history_context_loader"
+        ] = history_context_loader
 
     return run_batch(
         **batch_kwargs
