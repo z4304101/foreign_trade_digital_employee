@@ -220,6 +220,7 @@ def process_mail(
     processed_store_path: Path = PROCESSED_STORE_PATH,
     create_draft: bool = False,
     wecom_config=None,
+    history_context_loader=None,
 ) -> str:
     """
     Process one ParsedEmail.
@@ -266,9 +267,35 @@ def process_mail(
     ):
         return SKIPPED_ALREADY_PROCESSED
 
-    customer_email = build_agent_payload(
-        mail
-    )
+    history_context = ""
+
+    if history_context_loader is not None:
+        try:
+            history_context = (
+                history_context_loader(
+                    mail
+                )
+            )
+        except Exception:
+            # History learning is optional.
+            # Failure must never block normal
+            # customer email processing.
+            history_context = ""
+
+    if history_context:
+        customer_email = build_agent_payload(
+            mail,
+            history_context=history_context,
+        )
+    else:
+        # Preserve the original call shape when
+        # history is unavailable or disabled.
+        #
+        # History learning is an optional enhancement
+        # and must never break the existing mail flow.
+        customer_email = build_agent_payload(
+            mail
+        )
 
     result = run_foreign_trade_agent(
         provider=provider,
