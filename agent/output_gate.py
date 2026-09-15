@@ -203,6 +203,115 @@ def _validate_timing_commitments(
             )
 
 
+def _validate_reply_language(
+    output: str,
+) -> None:
+    """
+    The customer-facing Reply Draft must be English.
+
+    The Skill prompt is the primary language instruction.
+    This gate adds deterministic protection against obvious
+    non-English drafts and common accidental language drift.
+    """
+
+    reply_draft = _extract_section(
+        output,
+        "## Reply Draft",
+    )
+
+    if not reply_draft:
+        raise ValueError(
+            "Reply Draft must be written in English"
+        )
+
+    # Scripts that clearly indicate the draft is not English.
+    non_english_script = re.compile(
+        "["
+        "\u3400-\u4dbf"   # CJK Extension A
+        "\u4e00-\u9fff"   # CJK
+        "\u3040-\u309f"   # Hiragana
+        "\u30a0-\u30ff"   # Katakana
+        "\uac00-\ud7af"   # Hangul
+        "\u0400-\u04ff"   # Cyrillic
+        "\u0600-\u06ff"   # Arabic
+        "\u0590-\u05ff"   # Hebrew
+        "\u0e00-\u0e7f"   # Thai
+        "\u0900-\u097f"   # Devanagari
+        "\u0370-\u03ff"   # Greek
+        "]"
+    )
+
+    if non_english_script.search(
+        reply_draft
+    ):
+        raise ValueError(
+            "Reply Draft must be written in English"
+        )
+
+    words = re.findall(
+        r"[A-Za-zÀ-ÖØ-öø-ÿ']+",
+        reply_draft.lower(),
+    )
+
+    # Short English drafts such as "Test reply" remain valid.
+    # For normal business replies, require at least one strong
+    # English/business-language marker.
+    if len(words) >= 4:
+        english_markers = {
+            "a",
+            "an",
+            "the",
+            "and",
+            "or",
+            "but",
+            "if",
+            "we",
+            "you",
+            "your",
+            "our",
+            "is",
+            "are",
+            "be",
+            "to",
+            "of",
+            "for",
+            "in",
+            "on",
+            "with",
+            "this",
+            "that",
+            "thank",
+            "thanks",
+            "dear",
+            "regards",
+            "please",
+            "will",
+            "can",
+            "could",
+            "would",
+            "inquiry",
+            "information",
+            "verification",
+            "price",
+            "payment",
+            "delivery",
+            "quotation",
+            "quote",
+            "order",
+            "product",
+            "customer",
+        }
+
+        if not any(
+            word in english_markers
+            for word in words
+        ):
+            raise ValueError(
+                "Reply Draft must be written in English"
+            )
+
+
+
 def _validate_send_status(
     output: str,
 ) -> None:
@@ -250,6 +359,8 @@ def validate_agent_output(
     _validate_discount_risk(output)
 
     _validate_timing_commitments(output)
+
+    _validate_reply_language(output)
 
     _validate_send_status(output)
 

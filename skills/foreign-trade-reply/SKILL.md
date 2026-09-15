@@ -17,7 +17,7 @@ and replying to international customers.
 
 The user may not understand the customer's original language.
 
-Every generated foreign-language reply MUST include a Chinese
+Every generated English reply MUST include a Chinese
 back-translation.
 
 This skill generates drafts only.
@@ -73,9 +73,15 @@ The required headings are:
 ## Chinese Back-Translation
 ## Send Status
 
-The content inside each section may be written in Chinese or
-the customer's original language as required by this skill,
-but the section headings themselves MUST remain exactly as listed.
+The analysis sections may use Chinese where required by this skill.
+
+Reply Draft MUST be written in English regardless of the
+customer's original language.
+
+Chinese Translation and Chinese Back-Translation MUST remain
+in Chinese.
+
+The section headings themselves MUST remain exactly as listed.
 
 
 ## 2. Current Message Is the Authoritative Source
@@ -258,6 +264,66 @@ Baltic Automation GmbH, do not use those historical identities
 as current Customer or Company facts.
 
 
+## 2B. Learned Style and Historical Memory
+
+Content between:
+
+HISTORICAL_MEMORY_BEGIN
+
+and:
+
+HISTORICAL_MEMORY_END
+
+is historical background only.
+
+It MUST NOT be treated as a confirmed current customer fact.
+
+Historical memory MUST NOT populate current Key Information
+unless the Current Message explicitly confirms the same fact.
+
+This restriction includes historical:
+
+- prices
+- discounts
+- quantities
+- payment terms
+- Incoterms
+- delivery dates
+- lead times
+- inventory
+- warranty terms
+- bank information
+- quotations
+- promises
+- commitments
+
+Learned personal style MAY influence:
+
+- tone
+- typical length
+- greeting style
+- closing style
+- structure
+- wording preference
+
+Learned personal style MUST NOT override:
+
+- commercial safety rules
+- factual verification rules
+- human approval
+- the required output headings
+- Chinese Translation
+- Chinese Back-Translation
+- the requirement that Reply Draft is always English
+
+Same-domain history from another contact is weaker context.
+
+When only a company-domain match exists, another contact's
+historical email body MUST NOT be treated as context for the
+current customer.
+
+
+
 ## 3. Never Guess Commercial Facts
 
 The skill MUST NOT infer, assume, estimate, default, invent,
@@ -434,6 +500,39 @@ The Reply Draft MUST NOT create:
 unless the relevant information is explicitly verified.
 
 
+## 5A. Reply Language Is Always English
+
+Reply Draft MUST be written in English.
+
+This requirement applies regardless of whether the customer
+writes in:
+
+- English
+- Chinese
+- French
+- German
+- Russian
+- Spanish
+- Japanese
+- Korean
+- Arabic
+- or any other language
+
+The Customer Language section MUST still report the customer's
+actual original language.
+
+Chinese Translation MUST still translate the customer's current
+message into Chinese for internal review.
+
+Chinese Back-Translation MUST still translate the complete
+English Reply Draft into Chinese for internal review.
+
+Historical email language MUST NOT change the Reply Draft language.
+
+The customer-facing draft language is always English.
+
+
+
 ## 6. Human Approval Is Mandatory
 
 The final section MUST be exactly:
@@ -519,7 +618,8 @@ The skill MUST execute the following workflow:
 
 12. Determine whether company information must be verified.
 
-13. Generate a safe reply draft in the customer's original language.
+13. Generate a safe reply draft in English regardless of the
+    customer's original language.
 
 14. Check the reply for unsupported assumptions.
 
@@ -602,7 +702,7 @@ MUST provide a Chinese translation of the customer's original
 Current Message.
 
 MUST provide a Chinese back-translation of every generated
-foreign-language reply.
+English reply.
 
 MUST mark information requiring internal verification.
 
@@ -646,7 +746,8 @@ WAITING_FOR_HUMAN_APPROVAL
 
 # SHOULD
 
-SHOULD reply in the customer's original language.
+MUST write the customer-facing Reply Draft in English,
+regardless of the customer's original language.
 
 SHOULD use professional B2B communication style.
 

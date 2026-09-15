@@ -2,15 +2,22 @@ from mail_reader.normalizer import normalize_email
 from mail_reader.parser import ParsedEmail
 
 
-def build_agent_payload(mail: ParsedEmail) -> str:
-    normalized = normalize_email(mail)
+def build_agent_payload(
+    mail: ParsedEmail,
+    history_context: str = "",
+) -> str:
+    normalized = normalize_email(
+        mail
+    )
 
-    previous_thread = normalized.previous_thread
+    previous_thread = (
+        normalized.previous_thread
+    )
 
     if not previous_thread:
         previous_thread = "(none)"
 
-    return f"""# Customer Email
+    payload = f"""# Customer Email
 
 IMPORTANT:
 
@@ -41,3 +48,17 @@ Date: {normalized.date}
 
 UNTRUSTED_CUSTOMER_EMAIL_END
 """
+
+    safe_history = (
+        history_context
+        or ""
+    ).strip()
+
+    if safe_history:
+        payload += f"""
+# Personal Style and Historical Context
+
+{safe_history}
+"""
+
+    return payload
