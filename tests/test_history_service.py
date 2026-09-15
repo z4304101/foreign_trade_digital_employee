@@ -431,3 +431,276 @@ def test_one_broken_message_does_not_stop_later_messages(
     assert store.email_exists(
         "<inbox-3@example.com>"
     )
+
+
+def test_incremental_sent_sync_learns_only_new_message(
+    tmp_path,
+    monkeypatch,
+):
+    service = load_service()
+
+    config = make_config()
+
+    store = HistoryStore(
+        tmp_path / "history.db"
+    )
+    store.initialize()
+
+    previous_sync = (
+        "2026-09-10T12:00:00+00:00"
+    )
+
+    store.set_learning_state(
+        {
+            "initial_learning_completed": "true",
+            "last_sent_sync_at": previous_sync,
+        }
+    )
+
+    old_sent = make_raw_email(
+        sender="sales@example.cn",
+        recipients="Pierre <pierre@example.com>",
+        subject="Re: Old RFQ",
+        message_id="<sent-old@example.com>",
+        sent_at=datetime(
+            2026,
+            9,
+            11,
+            10,
+            tzinfo=timezone.utc,
+        ),
+        body=(
+            "Dear Pierre,\n\n"
+            "Thank you for your inquiry.\n\n"
+            "Best regards"
+        ),
+    )
+
+    new_sent = make_raw_email(
+        sender="sales@example.cn",
+        recipients="Alice <alice@example.com>",
+        subject="Re: New inquiry",
+        message_id="<sent-new@example.com>",
+        sent_at=datetime(
+            2026,
+            9,
+            14,
+            10,
+            tzinfo=timezone.utc,
+        ),
+        body=(
+            "Dear Alice,\n\n"
+            "Thank you for your message. "
+            "We will confirm the requested "
+            "information internally.\n\n"
+            "Best regards"
+        ),
+    )
+
+    old_record = (
+        service._parsed_to_historical(
+            mail=real_parse_email(
+                old_sent
+            ),
+            mailbox="Sent",
+            own_email=config.email_user,
+        )
+    )
+
+    assert old_record is not None
+
+    assert store.insert_email(
+        old_record
+    ) is True
+
+    monkeypatch.setattr(
+        service,
+        "discover_sent_mailbox",
+        lambda config: "Sent",
+    )
+
+    def fake_fetch(
+        config,
+        mailbox,
+        since,
+        max_messages=1000,
+    ):
+        assert mailbox == "Sent"
+
+        assert (
+            since.isoformat()
+            == "2026-09-10"
+        )
+
+        return [
+            old_sent,
+            new_sent,
+        ]
+
+    monkeypatch.setattr(
+        service,
+        "fetch_folder_raw_emails",
+        fake_fetch,
+    )
+
+    provider = FakeProvider()
+
+    now = datetime(
+        2026,
+        9,
+        15,
+        12,
+        tzinfo=timezone.utc,
+    )
+
+    summary = (
+        service.sync_sent_incremental(
+            mail_config=config,
+            provider=provider,
+            store=store,
+            now=now,
+        )
+    )
+
+    assert summary.scanned == 2
+    assert summary.learned == 1
+    assert summary.skipped == 1
+    assert summary.failed == 0
+
+    assert (
+        summary.sent_mailbox_found
+        is True
+    )
+
+    assert (
+        summary.style_profile_updated
+        is True
+    )
+
+    assert store.email_exists(
+        "<sent-old@example.com>"
+    )
+
+    assert store.email_exists(
+        "<sent-new@example.com>"
+    )
+
+    # Rebuild style only once for the batch.
+    assert len(
+        provider.calls
+    ) == 1
+
+    state = (
+        store.get_learning_state()
+    )
+
+    assert (
+        state[
+            "last_sent_sync_at"
+        ]
+        == now.isoformat()
+    )
+
+
+def test_incremental_sync_does_not_advance_checkpoint_when_style_fails(
+    tmp_path,
+    monkeypatch,
+):
+    service = load_service()
+
+    config = make_config()
+
+    store = HistoryStore(
+        tmp_path / "history.db"
+    )
+    store.initialize()
+
+    previous_sync = (
+        "2026-09-10T12:00:00+00:00"
+    )
+
+    store.set_learning_state(
+        {
+            "initial_learning_completed": "true",
+            "last_sent_sync_at": previous_sync,
+        }
+    )
+
+    new_sent = make_raw_email(
+        sender="sales@example.cn",
+        recipients="David <david@example.com>",
+        subject="Re: Inquiry",
+        message_id="<sent-fail@example.com>",
+        sent_at=datetime(
+            2026,
+            9,
+            14,
+            10,
+            tzinfo=timezone.utc,
+        ),
+        body=(
+            "Dear David,\n\n"
+            "Thank you for your inquiry.\n\n"
+            "Best regards"
+        ),
+    )
+
+    monkeypatch.setattr(
+        service,
+        "discover_sent_mailbox",
+        lambda config: "Sent",
+    )
+
+    monkeypatch.setattr(
+        service,
+        "fetch_folder_raw_emails",
+        lambda config, mailbox, since, max_messages=1000: [
+            new_sent
+        ],
+    )
+
+    class FailingProvider:
+        def generate_reply(
+            self,
+            skill_text,
+            customer_email,
+        ):
+            raise RuntimeError(
+                "style provider failed"
+            )
+
+    now = datetime(
+        2026,
+        9,
+        15,
+        12,
+        tzinfo=timezone.utc,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="style provider failed",
+    ):
+        service.sync_sent_incremental(
+            mail_config=config,
+            provider=FailingProvider(),
+            store=store,
+            now=now,
+        )
+
+    # Email itself may already be safely stored.
+    assert store.email_exists(
+        "<sent-fail@example.com>"
+    )
+
+    # But checkpoint must NOT move forward.
+    state = (
+        store.get_learning_state()
+    )
+
+    assert (
+        state[
+            "last_sent_sync_at"
+        ]
+        == previous_sync
+    )
