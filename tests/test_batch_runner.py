@@ -214,6 +214,14 @@ def test_batch_main_wires_configs_provider_and_batch_runner(
 ):
     import run_foreign_trade_agent as runner
 
+    # Isolate this legacy wiring test from the
+    # real local history database.
+    monkeypatch.setattr(
+        runner,
+        "HISTORY_DB_PATH",
+        tmp_path / "no-history.db",
+    )
+
     fake_mail_config = object()
     fake_llm_config = object()
     fake_provider = object()

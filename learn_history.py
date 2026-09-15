@@ -1,8 +1,12 @@
 from pathlib import Path
 
+from history_learning.reply_baseline import (
+    seed_processed_store_from_history,
+)
 from history_learning.service import (
     run_initial_learning,
 )
+from history_learning.store import HistoryStore
 from llm.config import load_llm_config
 from llm.factory import create_llm_provider
 from mail_reader.config import load_mail_config
@@ -12,16 +16,30 @@ HISTORY_DB_PATH = Path(
     "runtime/history_learning.db"
 )
 
+PROCESSED_STORE_PATH = Path(
+    "runtime/processed_message_ids.txt"
+)
+
 
 def main():
     """
     Manually start the first history-learning run.
 
-    This is intentionally separate from the normal
-    production mail-processing entry point.
+    Initial learning is explicitly triggered
+    by the user.
 
-    Initial history learning must be explicitly
-    triggered by the user.
+    After learning succeeds, all historical
+    incoming Message-IDs are added to the
+    production processed-message baseline.
+
+    Therefore:
+
+        historical INBOX
+            -> learn only
+            -> never create a new reply draft
+
+        future INBOX mail
+            -> remains eligible for processing
     """
 
     mail_config = load_mail_config()
@@ -32,11 +50,25 @@ def main():
         config=llm_config,
     )
 
-    return run_initial_learning(
+    summary = run_initial_learning(
         mail_config=mail_config,
         provider=provider,
         db_path=HISTORY_DB_PATH,
     )
+
+    store = HistoryStore(
+        HISTORY_DB_PATH
+    )
+    store.initialize()
+
+    seed_processed_store_from_history(
+        store=store,
+        processed_store_path=(
+            PROCESSED_STORE_PATH
+        ),
+    )
+
+    return summary
 
 
 if __name__ == "__main__":
@@ -86,5 +118,10 @@ if __name__ == "__main__":
         )
 
     print(
-        "\nNo customer email was automatically sent."
+        "\nHistorical inbox mail was "
+        "added to the reply baseline."
+    )
+
+    print(
+        "No customer email was automatically sent."
     )

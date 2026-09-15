@@ -262,6 +262,35 @@ class HistoryStore:
 
             return row is not None
 
+    def list_incoming_message_ids(
+        self,
+    ) -> list[str]:
+        """
+        Return Message-IDs learned from historical INBOX mail.
+
+        These IDs form the initial reply baseline:
+        historical incoming mail may be used for learning,
+        but must never be treated as a new inquiry later.
+        """
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT message_id
+                FROM email_history
+                WHERE direction = 'incoming'
+                  AND message_id != ''
+                ORDER BY sent_at ASC
+                """
+            ).fetchall()
+
+        return [
+            row["message_id"]
+            for row in rows
+            if row["message_id"]
+        ]
+
+
     def list_sent(
         self,
         limit: int | None = None,

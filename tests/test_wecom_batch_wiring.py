@@ -2,9 +2,19 @@ from types import SimpleNamespace
 
 
 def test_batch_main_passes_wecom_config_to_batch_runner(
+    tmp_path,
     monkeypatch,
 ):
     import run_foreign_trade_agent as runner
+
+    # This test verifies WeCom wiring only.
+    # Do not let a real history DB inject
+    # unrelated history_context_loader state.
+    monkeypatch.setattr(
+        runner,
+        "HISTORY_DB_PATH",
+        tmp_path / "no-history.db",
+    )
 
     fake_mail_config = object()
     fake_llm_config = object()
