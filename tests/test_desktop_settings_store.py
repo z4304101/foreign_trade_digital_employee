@@ -49,3 +49,66 @@ def test_settings_store_returns_defaults_when_file_missing(
     assert settings.history_limit == 1000
     assert settings.onboarding_completed is False
     assert settings.baseline_completed is False
+
+
+def test_credentials_never_leak_into_settings_file(
+    tmp_path: Path,
+):
+    from desktop.credentials import (
+        AI_API_KEY,
+        EMAIL_AUTH_CODE,
+        WECOM_WEBHOOK,
+        MemoryCredentialStore,
+    )
+
+    credential_store = MemoryCredentialStore()
+
+    credential_store.set(
+        EMAIL_AUTH_CODE,
+        "mail-secret-value",
+    )
+    credential_store.set(
+        AI_API_KEY,
+        "ai-secret-value",
+    )
+    credential_store.set(
+        WECOM_WEBHOOK,
+        "https://example.invalid/secret-hook",
+    )
+
+    settings_store = SettingsStore(
+        tmp_path / "settings.json"
+    )
+
+    settings_store.save(
+        DesktopSettings(
+            email_user="sales@163.com",
+            llm_model="test-model",
+        )
+    )
+
+    raw_text = (
+        tmp_path / "settings.json"
+    ).read_text(
+        encoding="utf-8"
+    )
+
+    assert "mail-secret-value" not in raw_text
+    assert "ai-secret-value" not in raw_text
+    assert (
+        "https://example.invalid/secret-hook"
+        not in raw_text
+    )
+
+    assert (
+        credential_store.get(EMAIL_AUTH_CODE)
+        == "mail-secret-value"
+    )
+    assert (
+        credential_store.get(AI_API_KEY)
+        == "ai-secret-value"
+    )
+    assert (
+        credential_store.get(WECOM_WEBHOOK)
+        == "https://example.invalid/secret-hook"
+    )
