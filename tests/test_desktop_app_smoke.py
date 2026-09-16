@@ -782,3 +782,38 @@ def test_settings_dialog_exposes_only_normal_user_settings():
     ) in calls
 
     dialog.close()
+
+
+def test_settings_dialog_uses_scroll_area_for_small_screens():
+    from PySide6.QtWidgets import (
+        QApplication,
+        QScrollArea,
+    )
+
+    from desktop.models import DesktopSettings
+    from desktop.ui.settings_dialog import SettingsDialog
+
+    app = (
+        QApplication.instance()
+        or QApplication([])
+    )
+
+    dialog = SettingsDialog(
+        settings=DesktopSettings(),
+        on_save_identity=lambda n, t, c: None,
+        on_toggle_autostart=lambda enabled: None,
+        on_toggle_desktop_notifications=lambda enabled: None,
+        on_test_mail=lambda: True,
+        on_test_wecom=lambda: True,
+        on_relearn_history=lambda: None,
+        on_open_admin=lambda: None,
+    )
+
+    scroll = dialog.findChild(
+        QScrollArea
+    )
+
+    assert scroll is not None
+    assert scroll.widgetResizable() is True
+
+    dialog.close()

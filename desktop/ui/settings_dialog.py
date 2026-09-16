@@ -3,10 +3,12 @@ from collections.abc import Callable
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -136,6 +138,35 @@ class SettingsDialog(QDialog):
             title
         )
 
+        self.scroll_area = QScrollArea(
+            self
+        )
+
+        self.scroll_area.setWidgetResizable(
+            True
+        )
+
+        self.scroll_area.setFrameShape(
+            QFrame.Shape.NoFrame
+        )
+
+        content = QWidget()
+
+        content_layout = QVBoxLayout(
+            content
+        )
+
+        content_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+        content_layout.setSpacing(
+            16
+        )
+
         #
         # Account
         #
@@ -222,7 +253,7 @@ class SettingsDialog(QDialog):
             self.mail_status_label
         )
 
-        root.addWidget(
+        content_layout.addWidget(
             account_card
         )
 
@@ -321,7 +352,7 @@ class SettingsDialog(QDialog):
             identity_actions
         )
 
-        root.addWidget(
+        content_layout.addWidget(
             identity_card
         )
 
@@ -383,7 +414,7 @@ class SettingsDialog(QDialog):
             self.notifications_checkbox
         )
 
-        root.addWidget(
+        content_layout.addWidget(
             preferences_card
         )
 
@@ -519,7 +550,7 @@ class SettingsDialog(QDialog):
             learning_actions
         )
 
-        root.addWidget(
+        content_layout.addWidget(
             learning_card
         )
 
@@ -562,8 +593,21 @@ class SettingsDialog(QDialog):
             self.admin_button
         )
 
-        root.addLayout(
+        content_layout.addLayout(
             admin_row
+        )
+
+        content_layout.addStretch(
+            1
+        )
+
+        self.scroll_area.setWidget(
+            content
+        )
+
+        root.addWidget(
+            self.scroll_area,
+            1,
         )
 
     def _save_identity(
