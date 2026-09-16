@@ -567,47 +567,42 @@ def main() -> str:
     )
 
 
-def batch_main(
-    wecom_config=None,
+def run_configured_production(
+    *,
+    mail_config,
+    provider: LLMProvider,
+    wecom_config,
+    skill_path: Path,
+    result_path: Path,
+    processed_store_path: Path,
+    history_db_path: Path,
+    limit: int = BATCH_LIMIT,
 ) -> dict[str, int]:
     """
-    Production batch entry point.
+    Run the production batch workflow using explicit
+    configuration objects and explicit runtime paths.
 
-    Scan recent emails,
-    ignore known non-customer messages,
-    skip already processed Message-IDs,
-    process new customer emails,
-    save independent analysis history,
-    create reply drafts,
-    optionally notify WeCom,
-    and return a summary.
+    This is the reusable production entry point used by
+    both the CLI and the desktop application.
 
     Email is NEVER automatically sent.
     """
 
-    mail_config = load_mail_config()
-
-    llm_config = load_llm_config()
-
-    provider = create_llm_provider(
-        config=llm_config,
-    )
-
     history_context_loader = None
 
-    # History learning is opt-in.
+    # History learning remains opt-in.
     #
     # Production MUST NOT silently perform the
     # initial six-month mailbox scan.
     #
     # History is enabled only after the user has
     # explicitly completed initial learning.
-    if HISTORY_DB_PATH.exists():
+    if history_db_path.exists():
         history_store = None
 
         try:
             history_store = HistoryStore(
-                HISTORY_DB_PATH
+                history_db_path
             )
             history_store.initialize()
 
@@ -633,8 +628,8 @@ def batch_main(
             history_initialized
             and history_store is not None
         ):
-            # First learn any final replies that the
-            # user actually sent since the last sync.
+            # Learn any final replies that the user
+            # actually sent since the last sync.
             #
             # Failure here is isolated. Existing
             # historical memory remains usable.
@@ -659,15 +654,13 @@ def batch_main(
     batch_kwargs = {
         "provider": provider,
         "mail_config": mail_config,
-        "skill_path": SKILL_PATH,
-        "result_path": RESULT_PATH,
-        "processed_store_path": PROCESSED_STORE_PATH,
-        "limit": BATCH_LIMIT,
+        "skill_path": skill_path,
+        "result_path": result_path,
+        "processed_store_path": processed_store_path,
+        "limit": limit,
         "create_draft": True,
     }
 
-    # Keep old behavior unchanged when
-    # WeCom is not configured.
     if wecom_config is not None:
         batch_kwargs[
             "wecom_config"
@@ -680,6 +673,39 @@ def batch_main(
 
     return run_batch(
         **batch_kwargs
+    )
+
+
+def batch_main(
+    wecom_config=None,
+) -> dict[str, int]:
+    """
+    Production batch entry point for the existing CLI.
+
+    Loads configuration from the existing development
+    environment and delegates to the reusable production
+    workflow.
+
+    Email is NEVER automatically sent.
+    """
+
+    mail_config = load_mail_config()
+
+    llm_config = load_llm_config()
+
+    provider = create_llm_provider(
+        config=llm_config,
+    )
+
+    return run_configured_production(
+        mail_config=mail_config,
+        provider=provider,
+        wecom_config=wecom_config,
+        skill_path=SKILL_PATH,
+        result_path=RESULT_PATH,
+        processed_store_path=PROCESSED_STORE_PATH,
+        history_db_path=HISTORY_DB_PATH,
+        limit=BATCH_LIMIT,
     )
 
 
