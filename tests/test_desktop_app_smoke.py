@@ -307,9 +307,13 @@ def test_desktop_application_does_not_start_scheduler_before_production_gate():
     class FakeWindow:
         def __init__(self):
             self.show_calls = 0
+            self.hide_calls = 0
 
         def show(self):
             self.show_calls += 1
+
+        def hide(self):
+            self.hide_calls += 1
 
     class FakeScheduler:
         def __init__(self):
@@ -319,21 +323,30 @@ def test_desktop_application_does_not_start_scheduler_before_production_gate():
             self.start_calls += 1
             return True
 
-    window = FakeWindow()
+        def pause(self):
+            pass
+
+        def resume(self):
+            pass
+
+        def run_now(self):
+            return None
+
+    dashboard = FakeWindow()
+    onboarding = FakeWindow()
     scheduler = FakeScheduler()
 
     desktop = DesktopApplication(
-        window=window,
+        dashboard_window=dashboard,
+        onboarding_window=onboarding,
         scheduler=scheduler,
         ready_check=lambda: False,
     )
 
     desktop.show()
 
-    # The desktop shell itself may open.
-    assert window.show_calls == 1
-
-    # But production mail processing must remain closed.
+    assert onboarding.show_calls == 1
+    assert dashboard.show_calls == 0
     assert scheduler.start_calls == 0
 
 
@@ -343,9 +356,13 @@ def test_desktop_application_starts_scheduler_after_production_gate():
     class FakeWindow:
         def __init__(self):
             self.show_calls = 0
+            self.hide_calls = 0
 
         def show(self):
             self.show_calls += 1
+
+        def hide(self):
+            self.hide_calls += 1
 
     class FakeScheduler:
         def __init__(self):
@@ -355,18 +372,30 @@ def test_desktop_application_starts_scheduler_after_production_gate():
             self.start_calls += 1
             return True
 
-    window = FakeWindow()
+        def pause(self):
+            pass
+
+        def resume(self):
+            pass
+
+        def run_now(self):
+            return None
+
+    dashboard = FakeWindow()
+    onboarding = FakeWindow()
     scheduler = FakeScheduler()
 
     desktop = DesktopApplication(
-        window=window,
+        dashboard_window=dashboard,
+        onboarding_window=onboarding,
         scheduler=scheduler,
         ready_check=lambda: True,
     )
 
     desktop.show()
 
-    assert window.show_calls == 1
+    assert dashboard.show_calls == 1
+    assert onboarding.show_calls == 0
     assert scheduler.start_calls == 1
 
 
@@ -375,6 +404,9 @@ def test_desktop_application_controls_scheduler():
 
     class FakeWindow:
         def show(self):
+            pass
+
+        def hide(self):
             pass
 
     class FakeScheduler:
@@ -393,6 +425,7 @@ def test_desktop_application_controls_scheduler():
 
         def run_now(self):
             self.calls.append("run_now")
+
             return {
                 "total": 0,
                 "processed": 0,
@@ -403,13 +436,15 @@ def test_desktop_application_controls_scheduler():
     scheduler = FakeScheduler()
 
     desktop = DesktopApplication(
-        window=FakeWindow(),
+        dashboard_window=FakeWindow(),
+        onboarding_window=FakeWindow(),
         scheduler=scheduler,
         ready_check=lambda: True,
     )
 
     desktop.pause()
     desktop.resume()
+
     result = desktop.run_now()
 
     assert scheduler.calls == [
@@ -424,7 +459,6 @@ def test_desktop_application_controls_scheduler():
         "skipped": 0,
         "failed": 0,
     }
-
 
 
 def test_onboarding_window_requires_history_before_completion():
@@ -817,3 +851,69 @@ def test_settings_dialog_uses_scroll_area_for_small_screens():
     assert scroll.widgetResizable() is True
 
     dialog.close()
+
+
+
+def test_desktop_application_routes_first_run_through_onboarding():
+    from desktop.app import DesktopApplication
+
+    class FakeWindow:
+        def __init__(self):
+            self.show_calls = 0
+            self.hide_calls = 0
+
+        def show(self):
+            self.show_calls += 1
+
+        def hide(self):
+            self.hide_calls += 1
+
+    class FakeScheduler:
+        def __init__(self):
+            self.start_calls = 0
+
+        def start(self):
+            self.start_calls += 1
+            return True
+
+        def pause(self):
+            pass
+
+        def resume(self):
+            pass
+
+        def run_now(self):
+            return None
+
+    dashboard = FakeWindow()
+    onboarding = FakeWindow()
+    scheduler = FakeScheduler()
+
+    ready = {
+        "value": False,
+    }
+
+    desktop = DesktopApplication(
+        dashboard_window=dashboard,
+        onboarding_window=onboarding,
+        scheduler=scheduler,
+        ready_check=lambda: ready["value"],
+    )
+
+    desktop.show()
+
+    assert onboarding.show_calls == 1
+    assert dashboard.show_calls == 0
+    assert scheduler.start_calls == 0
+
+    ready["value"] = True
+
+    desktop.on_onboarding_complete()
+
+    assert onboarding.hide_calls == 1
+    assert dashboard.show_calls == 1
+    assert scheduler.start_calls == 1
+
+    desktop.on_onboarding_complete()
+
+    assert scheduler.start_calls == 1
