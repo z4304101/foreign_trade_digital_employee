@@ -324,3 +324,223 @@ def test_stop_stops_timer_and_prevents_future_auto_ticks():
     timer.fire()
 
     assert calls == ["cycle"]
+
+
+def test_start_is_blocked_when_production_gate_is_not_ready():
+    calls = []
+    created_timers = []
+
+    class FakeTimer:
+        def __init__(
+            self,
+            interval_seconds,
+            callback,
+        ):
+            self.callback = callback
+            self.started = False
+
+        def start(self):
+            self.started = True
+
+        def stop(self):
+            pass
+
+    def timer_factory(
+        interval_seconds,
+        callback,
+    ):
+        timer = FakeTimer(
+            interval_seconds,
+            callback,
+        )
+        created_timers.append(timer)
+        return timer
+
+    scheduler = DesktopScheduler(
+        interval_seconds=180,
+        cycle=lambda: calls.append("cycle"),
+        on_result=lambda result: None,
+        on_error=lambda error: None,
+        timer_factory=timer_factory,
+        ready_check=lambda: False,
+    )
+
+    started = scheduler.start()
+
+    assert started is False
+    assert scheduler.is_running is False
+    assert scheduler.is_paused is False
+
+    # Gate closed means timer must not even start.
+    assert created_timers == []
+
+    # Production cycle must never run.
+    assert calls == []
+
+
+def test_run_now_is_blocked_when_production_gate_is_not_ready():
+    calls = []
+    results = []
+    errors = []
+
+    scheduler = DesktopScheduler(
+        interval_seconds=180,
+        cycle=lambda: calls.append("cycle"),
+        on_result=lambda result: results.append(result),
+        on_error=lambda error: errors.append(error),
+        ready_check=lambda: False,
+    )
+
+    returned = scheduler.run_now()
+
+    assert returned is None
+
+    # Manual check must not bypass onboarding/baseline gate.
+    assert calls == []
+    assert results == []
+    assert errors == []
+
+    assert scheduler.is_running is False
+    assert scheduler.is_paused is False
+
+
+def test_repeated_cycle_failures_update_health_tracker():
+    from desktop.health import (
+        AppStatus,
+        HealthTracker,
+        ServiceName,
+    )
+
+    tracker = HealthTracker()
+
+    errors = []
+
+    def failing_cycle():
+        raise TimeoutError(
+            "temporary network timeout"
+        )
+
+    scheduler = DesktopScheduler(
+        interval_seconds=180,
+        cycle=failing_cycle,
+        on_result=lambda result: None,
+        on_error=lambda error: errors.append(error),
+        health_tracker=tracker,
+        health_service=ServiceName.MAIL,
+    )
+
+    scheduler.run_now()
+    scheduler.run_now()
+
+    assert (
+        tracker.status(AppStatus.RUNNING)
+        == AppStatus.RUNNING
+    )
+
+    scheduler.run_now()
+
+    assert (
+        tracker.status(AppStatus.RUNNING)
+        == AppStatus.NEEDS_ATTENTION
+    )
+
+    assert len(errors) == 3
+
+
+def test_successful_cycle_resets_health_failure_count():
+    from desktop.health import (
+        AppStatus,
+        HealthTracker,
+        ServiceName,
+    )
+
+    tracker = HealthTracker()
+
+    attempts = {
+        "count": 0,
+    }
+
+    def flaky_cycle():
+        attempts["count"] += 1
+
+        if attempts["count"] <= 3:
+            raise TimeoutError(
+                "temporary network timeout"
+            )
+
+        return {
+            "total": 1,
+            "processed": 1,
+            "skipped": 0,
+            "failed": 0,
+        }
+
+    scheduler = DesktopScheduler(
+        interval_seconds=180,
+        cycle=flaky_cycle,
+        on_result=lambda result: None,
+        on_error=lambda error: None,
+        health_tracker=tracker,
+        health_service=ServiceName.MAIL,
+    )
+
+    scheduler.run_now()
+    scheduler.run_now()
+    scheduler.run_now()
+
+    assert (
+        tracker.status(AppStatus.RUNNING)
+        == AppStatus.NEEDS_ATTENTION
+    )
+
+    result = scheduler.run_now()
+
+    assert result == {
+        "total": 1,
+        "processed": 1,
+        "skipped": 0,
+        "failed": 0,
+    }
+
+    assert (
+        tracker.status(AppStatus.RUNNING)
+        == AppStatus.RUNNING
+    )
+
+
+def test_unrecoverable_cycle_error_immediately_marks_service_error():
+    from desktop.health import (
+        AppStatus,
+        HealthTracker,
+        ServiceName,
+    )
+
+    tracker = HealthTracker()
+    errors = []
+
+    expected_error = RuntimeError(
+        "mail authentication expired"
+    )
+
+    def failing_cycle():
+        raise expected_error
+
+    scheduler = DesktopScheduler(
+        interval_seconds=180,
+        cycle=failing_cycle,
+        on_result=lambda result: None,
+        on_error=lambda error: errors.append(error),
+        health_tracker=tracker,
+        health_service=ServiceName.MAIL,
+        unrecoverable_error_check=lambda error: True,
+    )
+
+    returned = scheduler.run_now()
+
+    assert returned is None
+    assert errors == [expected_error]
+
+    assert (
+        tracker.status(AppStatus.RUNNING)
+        == AppStatus.SERVICE_ERROR
+    )

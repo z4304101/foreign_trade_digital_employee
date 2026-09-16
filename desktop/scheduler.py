@@ -1,6 +1,11 @@
 from collections.abc import Callable
 from typing import Any
 
+from desktop.health import (
+    HealthTracker,
+    ServiceName,
+)
+
 
 class DesktopScheduler:
     """
@@ -8,8 +13,11 @@ class DesktopScheduler:
 
     Manual and automatic checks reuse the same cycle.
 
-    Automatic timer ticks respect start / pause /
-    resume / stop state.
+    Automatic polling can only start when the optional
+    production readiness gate allows it.
+
+    Ordinary cycle failures can also be reported to the
+    desktop health tracker.
     """
 
     def __init__(
@@ -24,6 +32,10 @@ class DesktopScheduler:
             Any,
         ]
         | None = None,
+        ready_check: Callable[[], bool] | None = None,
+        health_tracker: HealthTracker | None = None,
+        health_service: ServiceName | None = None,
+        unrecoverable_error_check: Callable[[Exception], bool] | None = None,
     ) -> None:
         self.interval_seconds = interval_seconds
 
@@ -32,6 +44,12 @@ class DesktopScheduler:
         self.on_error = on_error
 
         self.timer_factory = timer_factory
+        self.ready_check = ready_check
+
+        self.health_tracker = health_tracker
+        self.health_service = health_service
+        self.unrecoverable_error_check = unrecoverable_error_check
+
         self._timer = None
 
         self.is_running = False
@@ -43,17 +61,49 @@ class DesktopScheduler:
         """
         Run one mail-processing cycle immediately.
 
-        Manual execution is allowed even while
-        automatic polling is paused.
+        Manual execution is allowed while paused, but it
+        must never bypass the production readiness gate.
         """
+
+        if (
+            self.ready_check is not None
+            and not self.ready_check()
+        ):
+            return None
 
         try:
             result = self.cycle()
+
         except Exception as error:
+            unrecoverable = False
+
+            if self.unrecoverable_error_check is not None:
+                unrecoverable = self.unrecoverable_error_check(
+                    error
+                )
+
+            if (
+                self.health_tracker is not None
+                and self.health_service is not None
+            ):
+                self.health_tracker.record_failure(
+                    self.health_service,
+                    unrecoverable=unrecoverable,
+                )
+
             self.on_error(
                 error
             )
+
             return None
+
+        if (
+            self.health_tracker is not None
+            and self.health_service is not None
+        ):
+            self.health_tracker.record_success(
+                self.health_service
+            )
 
         self.on_result(
             result
@@ -78,13 +128,22 @@ class DesktopScheduler:
 
     def start(
         self,
-    ) -> None:
+    ) -> bool:
         """
         Start automatic polling.
+
+        Returns False when the production readiness
+        gate is closed. In that case no timer is created.
         """
 
         if self.is_running:
-            return
+            return True
+
+        if (
+            self.ready_check is not None
+            and not self.ready_check()
+        ):
+            return False
 
         if self.timer_factory is None:
             raise RuntimeError(
@@ -100,6 +159,8 @@ class DesktopScheduler:
         self.is_paused = False
 
         self._timer.start()
+
+        return True
 
     def pause(
         self,
@@ -132,9 +193,6 @@ class DesktopScheduler:
     ) -> None:
         """
         Stop automatic polling completely.
-
-        Any stale timer callback that fires later
-        is blocked by is_running=False.
         """
 
         if self._timer is not None:
