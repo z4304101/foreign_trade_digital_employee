@@ -1,7 +1,10 @@
 from collections.abc import Callable
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QGroupBox,
+    QAbstractItemView,
+    QFrame,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -14,22 +17,27 @@ from PySide6.QtWidgets import (
 
 from desktop.health import AppStatus
 from desktop.models import DashboardSnapshot
+from desktop.ui.components import (
+    Card,
+    SectionTitle,
+    StatCard,
+    StatusChip,
+)
 
 
 class DashboardWindow(QMainWindow):
     """
-    Main dashboard window for the desktop application.
+    Fluent-style operational dashboard.
 
-    The dashboard only displays operational summaries.
+    Only operational summaries are displayed.
 
-    It never displays:
-    - customer email bodies
-    - mailbox auth codes
-    - API keys
+    The dashboard never displays:
+    - complete customer email bodies
+    - mailbox authorization codes
+    - AI API keys
     - WeCom webhook secrets
 
-    Desktop V1 remains draft-only and does not expose
-    any email-send action.
+    Desktop V1 remains draft-only.
     """
 
     def __init__(
@@ -56,145 +64,490 @@ class DashboardWindow(QMainWindow):
         )
 
         self.resize(
+            1040,
+            760,
+        )
+
+        self.setMinimumSize(
             900,
             680,
         )
 
         central_widget = QWidget(self)
 
+        central_widget.setObjectName(
+            "AppRoot"
+        )
+
         main_layout = QVBoxLayout(
             central_widget
         )
 
+        main_layout.setContentsMargins(
+            30,
+            26,
+            30,
+            26,
+        )
+
+        main_layout.setSpacing(
+            18
+        )
+
         #
-        # Application status
+        # Header
+        #
+        header_layout = QHBoxLayout()
+
+        header_layout.setSpacing(
+            16
+        )
+
+        title_layout = QVBoxLayout()
+
+        title_layout.setSpacing(
+            2
+        )
+
+        title_label = QLabel(
+            "外贸数字员工"
+        )
+
+        title_font = title_label.font()
+
+        title_font.setPointSize(
+            22
+        )
+
+        title_font.setBold(
+            True
+        )
+
+        title_label.setFont(
+            title_font
+        )
+
+        subtitle_label = QLabel(
+            "AI Foreign Trade Assistant"
+        )
+
+        subtitle_label.setProperty(
+            "role",
+            "muted",
+        )
+
+        title_layout.addWidget(
+            title_label
+        )
+
+        title_layout.addWidget(
+            subtitle_label
+        )
+
+        header_layout.addLayout(
+            title_layout
+        )
+
+        header_layout.addStretch(
+            1
+        )
+
+        #
+        # Keep status_label as a stable public attribute
+        # for controller/tests, while status_chip is the
+        # actual visible Fluent status control.
         #
         self.status_label = QLabel(
             "等待初始化"
         )
 
+        self.status_label.setVisible(
+            False
+        )
+
+        self.status_chip = StatusChip(
+            "等待初始化",
+            "neutral",
+        )
+
+        header_layout.addWidget(
+            self.status_chip,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
+
+        self.settings_button = QPushButton(
+            "设置"
+        )
+
+        self.settings_button.setProperty(
+            "role",
+            "secondary",
+        )
+
+        self.settings_button.setFixedWidth(
+            82
+        )
+
+        self.settings_button.clicked.connect(
+            self._handle_settings_clicked
+        )
+
+        header_layout.addWidget(
+            self.settings_button
+        )
+
+        main_layout.addLayout(
+            header_layout
+        )
+
+        #
+        # Today overview
+        #
         main_layout.addWidget(
-            self.status_label
+            SectionTitle(
+                "今日概览"
+            )
         )
 
-        #
-        # Polling status
-        #
-        check_group = QGroupBox(
-            "邮件检查"
+        summary_layout = QHBoxLayout()
+
+        summary_layout.setSpacing(
+            14
         )
 
-        check_layout = QVBoxLayout(
-            check_group
+        self.scanned_card = StatCard(
+            "今日扫描",
+            "邮件",
         )
 
-        self.last_check_label = QLabel(
-            "上次检查：--"
+        self.inquiries_card = StatCard(
+            "新询盘",
+            "待查看",
         )
 
-        self.next_check_label = QLabel(
-            "下次检查：--"
-        )
-
-        check_layout.addWidget(
-            self.last_check_label
-        )
-
-        check_layout.addWidget(
-            self.next_check_label
-        )
-
-        main_layout.addWidget(
-            check_group
-        )
-
-        #
-        # Today's summary
-        #
-        summary_group = QGroupBox(
-            "今日统计"
-        )
-
-        summary_layout = QHBoxLayout(
-            summary_group
-        )
-
-        self.scanned_label = QLabel(
-            "今日扫描：0"
-        )
-
-        self.inquiries_label = QLabel(
-            "新询盘：0"
-        )
-
-        self.drafts_label = QLabel(
-            "已生成草稿：0"
+        self.drafts_card = StatCard(
+            "已生成草稿",
+            "163 草稿箱",
         )
 
         summary_layout.addWidget(
-            self.scanned_label
+            self.scanned_card,
+            1,
         )
 
         summary_layout.addWidget(
-            self.inquiries_label
+            self.inquiries_card,
+            1,
         )
 
         summary_layout.addWidget(
-            self.drafts_label
+            self.drafts_card,
+            1,
         )
 
-        main_layout.addWidget(
-            summary_group
+        main_layout.addLayout(
+            summary_layout
         )
 
         #
-        # Learning / integration state
+        # Service + polling row
         #
-        readiness_group = QGroupBox(
-            "数字员工状态"
+        info_layout = QHBoxLayout()
+
+        info_layout.setSpacing(
+            14
         )
 
-        readiness_layout = QVBoxLayout(
-            readiness_group
+        service_card = Card()
+
+        service_layout = QVBoxLayout(
+            service_card
         )
 
-        self.history_label = QLabel(
-            "历史学习：未完成"
+        service_layout.setContentsMargins(
+            18,
+            16,
+            18,
+            16,
         )
 
-        self.style_label = QLabel(
-            "回复风格：未学习"
+        service_layout.setSpacing(
+            10
         )
+
+        service_layout.addWidget(
+            SectionTitle(
+                "服务状态"
+            )
+        )
+
+        mail_row = QHBoxLayout()
+
+        mail_row.addWidget(
+            QLabel("邮箱服务")
+        )
+
+        mail_row.addStretch(1)
+
+        self.mail_service_label = QLabel(
+            "等待配置"
+        )
+
+        self.mail_service_label.setProperty(
+            "role",
+            "muted",
+        )
+
+        mail_row.addWidget(
+            self.mail_service_label
+        )
+
+        service_layout.addLayout(
+            mail_row
+        )
+
+        ai_row = QHBoxLayout()
+
+        ai_row.addWidget(
+            QLabel("AI 服务")
+        )
+
+        ai_row.addStretch(1)
+
+        self.ai_service_label = QLabel(
+            "等待配置"
+        )
+
+        self.ai_service_label.setProperty(
+            "role",
+            "muted",
+        )
+
+        ai_row.addWidget(
+            self.ai_service_label
+        )
+
+        service_layout.addLayout(
+            ai_row
+        )
+
+        wecom_row = QHBoxLayout()
+
+        wecom_row.addWidget(
+            QLabel("企业微信")
+        )
+
+        wecom_row.addStretch(1)
 
         self.wecom_label = QLabel(
-            "企业微信：未连接"
+            "未连接"
         )
 
-        readiness_layout.addWidget(
-            self.history_label
+        self.wecom_label.setProperty(
+            "role",
+            "muted",
         )
 
-        readiness_layout.addWidget(
-            self.style_label
-        )
-
-        readiness_layout.addWidget(
+        wecom_row.addWidget(
             self.wecom_label
         )
 
-        main_layout.addWidget(
-            readiness_group
+        service_layout.addLayout(
+            wecom_row
+        )
+
+        info_layout.addWidget(
+            service_card,
+            1,
+        )
+
+        polling_card = Card()
+
+        polling_layout = QVBoxLayout(
+            polling_card
+        )
+
+        polling_layout.setContentsMargins(
+            18,
+            16,
+            18,
+            16,
+        )
+
+        polling_layout.setSpacing(
+            10
+        )
+
+        polling_layout.addWidget(
+            SectionTitle(
+                "自动检查"
+            )
+        )
+
+        self.last_check_label = QLabel(
+            "上次：--"
+        )
+
+        self.next_check_label = QLabel(
+            "下次：--"
+        )
+
+        self.last_check_label.setProperty(
+            "role",
+            "muted",
+        )
+
+        self.next_check_label.setProperty(
+            "role",
+            "muted",
+        )
+
+        polling_layout.addWidget(
+            self.last_check_label
+        )
+
+        polling_layout.addWidget(
+            self.next_check_label
+        )
+
+        polling_layout.addStretch(
+            1
+        )
+
+        info_layout.addWidget(
+            polling_card,
+            1,
+        )
+
+        learning_card = Card()
+
+        learning_layout = QVBoxLayout(
+            learning_card
+        )
+
+        learning_layout.setContentsMargins(
+            18,
+            16,
+            18,
+            16,
+        )
+
+        learning_layout.setSpacing(
+            10
+        )
+
+        learning_layout.addWidget(
+            SectionTitle(
+                "学习状态"
+            )
+        )
+
+        history_row = QHBoxLayout()
+
+        history_row.addWidget(
+            QLabel("历史邮件")
+        )
+
+        history_row.addStretch(1)
+
+        self.history_label = QLabel(
+            "未完成"
+        )
+
+        self.history_label.setProperty(
+            "role",
+            "muted",
+        )
+
+        history_row.addWidget(
+            self.history_label
+        )
+
+        learning_layout.addLayout(
+            history_row
+        )
+
+        style_row = QHBoxLayout()
+
+        style_row.addWidget(
+            QLabel("回复风格")
+        )
+
+        style_row.addStretch(1)
+
+        self.style_label = QLabel(
+            "未学习"
+        )
+
+        self.style_label.setProperty(
+            "role",
+            "muted",
+        )
+
+        style_row.addWidget(
+            self.style_label
+        )
+
+        learning_layout.addLayout(
+            style_row
+        )
+
+        learning_layout.addStretch(
+            1
+        )
+
+        info_layout.addWidget(
+            learning_card,
+            1,
+        )
+
+        main_layout.addLayout(
+            info_layout
         )
 
         #
-        # Recent processing records
+        # Recent processing
         #
-        recent_group = QGroupBox(
-            "最近处理"
+        recent_header = QHBoxLayout()
+
+        recent_header.addWidget(
+            SectionTitle(
+                "最近处理"
+            )
         )
+
+        recent_header.addStretch(
+            1
+        )
+
+        recent_hint = QLabel(
+            "最近 10 条"
+        )
+
+        recent_hint.setProperty(
+            "role",
+            "muted",
+        )
+
+        recent_header.addWidget(
+            recent_hint
+        )
+
+        main_layout.addLayout(
+            recent_header
+        )
+
+        recent_card = Card()
 
         recent_layout = QVBoxLayout(
-            recent_group
+            recent_card
+        )
+
+        recent_layout.setContentsMargins(
+            1,
+            1,
+            1,
+            1,
         )
 
         self.recent_table = QTableWidget(
@@ -211,29 +564,103 @@ class DashboardWindow(QMainWindow):
             ]
         )
 
+        self.recent_table.verticalHeader().setVisible(
+            False
+        )
+
+        self.recent_table.verticalHeader().setDefaultSectionSize(
+            44
+        )
+
+        self.recent_table.setShowGrid(
+            False
+        )
+
+        self.recent_table.setAlternatingRowColors(
+            False
+        )
+
+        self.recent_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.NoSelection
+        )
+
+        self.recent_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+
+        self.recent_table.setFocusPolicy(
+            Qt.FocusPolicy.NoFocus
+        )
+
+        self.recent_table.setFrameShape(
+            QFrame.Shape.NoFrame
+        )
+
+        header = (
+            self.recent_table.horizontalHeader()
+        )
+
+        header.setStretchLastSection(
+            True
+        )
+
+        header.setSectionResizeMode(
+            0,
+            QHeaderView.ResizeMode.Stretch,
+        )
+
+        header.setSectionResizeMode(
+            1,
+            QHeaderView.ResizeMode.Stretch,
+        )
+
+        header.setSectionResizeMode(
+            2,
+            QHeaderView.ResizeMode.ResizeToContents,
+        )
+
+        header.setSectionResizeMode(
+            3,
+            QHeaderView.ResizeMode.Stretch,
+        )
+
+        self.recent_table.setMaximumHeight(
+            250
+        )
+
         recent_layout.addWidget(
             self.recent_table
         )
 
         main_layout.addWidget(
-            recent_group
+            recent_card
         )
 
         #
-        # Safe user actions
+        # Bottom actions
         #
         actions_layout = QHBoxLayout()
+
+        actions_layout.addStretch(
+            1
+        )
 
         self.pause_button = QPushButton(
             "暂停工作"
         )
 
-        self.run_now_button = QPushButton(
-            "立即检查一次"
+        self.pause_button.setProperty(
+            "role",
+            "secondary",
         )
 
-        self.settings_button = QPushButton(
-            "设置"
+        self.run_now_button = QPushButton(
+            "立即检查邮件"
+        )
+
+        self.run_now_button.setProperty(
+            "role",
+            "primary",
         )
 
         self.pause_button.clicked.connect(
@@ -244,20 +671,12 @@ class DashboardWindow(QMainWindow):
             self._handle_run_now_clicked
         )
 
-        self.settings_button.clicked.connect(
-            self._handle_settings_clicked
-        )
-
         actions_layout.addWidget(
             self.pause_button
         )
 
         actions_layout.addWidget(
             self.run_now_button
-        )
-
-        actions_layout.addWidget(
-            self.settings_button
         )
 
         main_layout.addLayout(
@@ -274,7 +693,10 @@ class DashboardWindow(QMainWindow):
     ) -> None:
         del checked
 
-        if self._current_status == AppStatus.PAUSED:
+        if (
+            self._current_status
+            == AppStatus.PAUSED
+        ):
             if self._on_resume is not None:
                 self._on_resume()
 
@@ -305,25 +727,50 @@ class DashboardWindow(QMainWindow):
         self,
         snapshot: DashboardSnapshot,
     ) -> None:
-        """
-        Render one dashboard state snapshot.
-        """
+        self._current_status = (
+            snapshot.status
+        )
 
-        self._current_status = snapshot.status
-
-        status_text = {
-            AppStatus.WAITING_INITIALIZATION: "等待初始化",
-            AppStatus.RUNNING: "正在运行",
-            AppStatus.PAUSED: "已暂停",
-            AppStatus.NEEDS_ATTENTION: "需要注意",
-            AppStatus.SERVICE_ERROR: "服务异常",
+        status_visual = {
+            AppStatus.WAITING_INITIALIZATION: (
+                "等待初始化",
+                "neutral",
+            ),
+            AppStatus.RUNNING: (
+                "正在运行",
+                "success",
+            ),
+            AppStatus.PAUSED: (
+                "已暂停",
+                "neutral",
+            ),
+            AppStatus.NEEDS_ATTENTION: (
+                "需要处理",
+                "warning",
+            ),
+            AppStatus.SERVICE_ERROR: (
+                "服务异常",
+                "danger",
+            ),
         }
 
-        self.status_label.setText(
-            status_text.get(
+        status_text, tone = (
+            status_visual.get(
                 snapshot.status,
-                "未知状态",
+                (
+                    "未知状态",
+                    "neutral",
+                ),
             )
+        )
+
+        self.status_label.setText(
+            status_text
+        )
+
+        self.status_chip.set_status(
+            status_text,
+            tone,
         )
 
         work_actions_enabled = (
@@ -346,7 +793,10 @@ class DashboardWindow(QMainWindow):
             True
         )
 
-        if snapshot.status == AppStatus.PAUSED:
+        if (
+            snapshot.status
+            == AppStatus.PAUSED
+        ):
             self.pause_button.setText(
                 "继续工作"
             )
@@ -356,7 +806,7 @@ class DashboardWindow(QMainWindow):
             )
 
         self.last_check_label.setText(
-            "上次检查："
+            "上次："
             + (
                 snapshot.last_check_at
                 or "--"
@@ -364,47 +814,82 @@ class DashboardWindow(QMainWindow):
         )
 
         self.next_check_label.setText(
-            "下次检查："
+            "下次："
             + (
                 snapshot.next_check_at
                 or "--"
             )
         )
 
-        self.scanned_label.setText(
-            f"今日扫描：{snapshot.today_scanned}"
+        self.scanned_card.set_value(
+            str(
+                snapshot.today_scanned
+            )
         )
 
-        self.inquiries_label.setText(
-            f"新询盘：{snapshot.today_new_inquiries}"
+        self.inquiries_card.set_value(
+            str(
+                snapshot.today_new_inquiries
+            )
         )
 
-        self.drafts_label.setText(
-            f"已生成草稿：{snapshot.today_drafts}"
+        self.drafts_card.set_value(
+            str(
+                snapshot.today_drafts
+            )
         )
 
         self.history_label.setText(
             (
-                "历史学习：✅ 已完成"
+                "已完成"
                 if snapshot.history_ready
-                else "历史学习：未完成"
+                else "未完成"
             )
         )
 
         self.style_label.setText(
             (
-                "回复风格：✅ 已学习"
+                "已学习"
                 if snapshot.style_ready
-                else "回复风格：未学习"
+                else "未学习"
             )
         )
 
         self.wecom_label.setText(
             (
-                "企业微信：✅ 已连接"
+                "已连接"
                 if snapshot.wecom_connected
-                else "企业微信：未连接"
+                else "未连接"
             )
+        )
+
+        if snapshot.status in {
+            AppStatus.RUNNING,
+            AppStatus.PAUSED,
+        }:
+            service_text = "正常"
+
+        elif (
+            snapshot.status
+            == AppStatus.NEEDS_ATTENTION
+        ):
+            service_text = "需要关注"
+
+        elif (
+            snapshot.status
+            == AppStatus.SERVICE_ERROR
+        ):
+            service_text = "需要检查"
+
+        else:
+            service_text = "等待配置"
+
+        self.mail_service_label.setText(
+            service_text
+        )
+
+        self.ai_service_label.setText(
+            service_text
         )
 
         records = tuple(
@@ -415,7 +900,9 @@ class DashboardWindow(QMainWindow):
             len(records)
         )
 
-        for row_index, record in enumerate(records):
+        for row_index, record in enumerate(
+            records
+        ):
             self.recent_table.setItem(
                 row_index,
                 0,
@@ -449,7 +936,7 @@ class DashboardWindow(QMainWindow):
 
             if record.draft_saved:
                 status_parts.append(
-                    "草稿已保存"
+                    "草稿已生成"
                 )
 
             if record.wecom_notified:
@@ -458,7 +945,9 @@ class DashboardWindow(QMainWindow):
                 )
 
             status_summary = (
-                " / ".join(status_parts)
+                " · ".join(
+                    status_parts
+                )
                 if status_parts
                 else "未完成"
             )

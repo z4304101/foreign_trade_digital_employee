@@ -20,28 +20,23 @@ def test_dashboard_renders_running_snapshot():
 
     window = DashboardWindow()
 
-    snapshot = DashboardSnapshot(
-        status=AppStatus.RUNNING,
-    )
-
     window.render(
-        snapshot
+        DashboardSnapshot(
+            status=AppStatus.RUNNING,
+        )
     )
 
+    assert window.status_label.text() == "正在运行"
     assert (
-        window.status_label.text()
+        window.status_chip.text_label.text()
         == "正在运行"
     )
-
-    assert (
-        window.recent_table.rowCount()
-        <= 10
-    )
+    assert window.recent_table.rowCount() <= 10
 
     window.close()
 
 
-def test_dashboard_renders_operational_summary_and_recent_record():
+def test_dashboard_renders_fluent_operational_summary():
     from desktop.models import ProcessRecord
 
     app = (
@@ -51,70 +46,73 @@ def test_dashboard_renders_operational_summary_and_recent_record():
 
     window = DashboardWindow()
 
-    snapshot = DashboardSnapshot(
-        status=AppStatus.RUNNING,
-        last_check_at="2026-09-16 17:40",
-        next_check_at="2026-09-16 17:43",
-        today_scanned=12,
-        today_new_inquiries=2,
-        today_drafts=2,
-        history_ready=True,
-        style_ready=True,
-        wecom_connected=True,
-        recent_records=(
-            ProcessRecord(
-                sender="buyer@example.com",
-                subject="Inquiry for MA310E",
-                processed_at="2026-09-16 17:40",
-                analysis_completed=True,
-                draft_saved=True,
-                wecom_notified=True,
+    window.render(
+        DashboardSnapshot(
+            status=AppStatus.RUNNING,
+            last_check_at="刚刚",
+            next_check_at="2 分 48 秒后",
+            today_scanned=12,
+            today_new_inquiries=2,
+            today_drafts=2,
+            history_ready=True,
+            style_ready=True,
+            wecom_connected=True,
+            recent_records=(
+                ProcessRecord(
+                    sender="buyer@example.com",
+                    subject="Inquiry for MA310E",
+                    processed_at="刚刚",
+                    analysis_completed=True,
+                    draft_saved=True,
+                    wecom_notified=True,
+                ),
             ),
-        ),
+        )
     )
 
-    window.render(
-        snapshot
+    assert (
+        window.status_chip.text_label.text()
+        == "正在运行"
+    )
+
+    assert (
+        window.scanned_card.value_label.text()
+        == "12"
+    )
+
+    assert (
+        window.inquiries_card.value_label.text()
+        == "2"
+    )
+
+    assert (
+        window.drafts_card.value_label.text()
+        == "2"
     )
 
     assert (
         window.last_check_label.text()
-        == "上次检查：2026-09-16 17:40"
+        == "上次：刚刚"
     )
 
     assert (
         window.next_check_label.text()
-        == "下次检查：2026-09-16 17:43"
-    )
-
-    assert (
-        window.scanned_label.text()
-        == "今日扫描：12"
-    )
-
-    assert (
-        window.inquiries_label.text()
-        == "新询盘：2"
-    )
-
-    assert (
-        window.drafts_label.text()
-        == "已生成草稿：2"
+        == "下次：2 分 48 秒后"
     )
 
     assert (
         window.history_label.text()
-        == "历史学习：✅ 已完成"
+        == "已完成"
     )
 
     assert (
         window.style_label.text()
-        == "回复风格：✅ 已学习"
+        == "已学习"
     )
 
     assert (
         window.wecom_label.text()
-        == "企业微信：✅ 已连接"
+        == "已连接"
     )
 
     assert window.recent_table.rowCount() == 1
@@ -133,14 +131,6 @@ def test_dashboard_renders_operational_summary_and_recent_record():
             1,
         ).text()
         == "Inquiry for MA310E"
-    )
-
-    assert (
-        window.recent_table.item(
-            0,
-            2,
-        ).text()
-        == "2026-09-16 17:40"
     )
 
     window.close()
@@ -163,7 +153,7 @@ def test_dashboard_exposes_safe_user_actions():
     )
 
     assert window.pause_button.text() == "暂停工作"
-    assert window.run_now_button.text() == "立即检查一次"
+    assert window.run_now_button.text() == "立即检查邮件"
     assert window.settings_button.text() == "设置"
 
     window.pause_button.click()
