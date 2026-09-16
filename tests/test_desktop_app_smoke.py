@@ -630,3 +630,155 @@ def test_onboarding_history_failure_keeps_finish_locked():
     )
 
     window.close()
+
+
+def test_settings_dialog_exposes_only_normal_user_settings():
+    from PySide6.QtWidgets import QLineEdit
+
+    from desktop.models import DesktopSettings
+    from desktop.ui.settings_dialog import SettingsDialog
+
+    app = (
+        QApplication.instance()
+        or QApplication([])
+    )
+
+    calls = []
+
+    dialog = SettingsDialog(
+        settings=DesktopSettings(
+            email_user="sales@163.com",
+            sender_name="Alice",
+            sender_title="Sales Manager",
+            sender_company="Example Co.",
+            autostart_enabled=True,
+            desktop_notifications_enabled=True,
+            baseline_completed=True,
+        ),
+        on_save_identity=lambda n, t, c: (
+            calls.append(
+                (
+                    "identity",
+                    n,
+                    t,
+                    c,
+                )
+            )
+        ),
+        on_toggle_autostart=lambda enabled: (
+            calls.append(
+                (
+                    "autostart",
+                    enabled,
+                )
+            )
+        ),
+        on_toggle_desktop_notifications=lambda enabled: (
+            calls.append(
+                (
+                    "notify",
+                    enabled,
+                )
+            )
+        ),
+        on_test_mail=lambda: True,
+        on_test_wecom=lambda: True,
+        on_relearn_history=lambda: calls.append(
+            ("relearn",)
+        ),
+        on_open_admin=lambda: calls.append(
+            ("admin",)
+        ),
+    )
+
+    assert dialog.name_edit.text() == "Alice"
+
+    assert (
+        dialog.title_edit.text()
+        == "Sales Manager"
+    )
+
+    assert (
+        dialog.company_edit.text()
+        == "Example Co."
+    )
+
+    assert (
+        dialog.email_value_label.text()
+        == "sales@163.com"
+    )
+
+    assert (
+        dialog.autostart_checkbox.isChecked()
+        is True
+    )
+
+    assert (
+        dialog.notifications_checkbox.isChecked()
+        is True
+    )
+
+    assert (
+        dialog.admin_button.text()
+        == "高级设置"
+    )
+
+    #
+    # Normal settings must not expose technical secrets
+    # or advanced transport/model fields.
+    #
+    line_edit_texts = [
+        edit.text()
+        for edit in dialog.findChildren(
+            QLineEdit
+        )
+    ]
+
+    all_visible_text = " ".join(
+        [
+            dialog.windowTitle(),
+            dialog.admin_button.text(),
+            *line_edit_texts,
+        ]
+    )
+
+    forbidden = (
+        "API Key",
+        "Base URL",
+        "imap.163.com",
+        "993",
+        "1000",
+        "history_limit",
+        "history_months",
+        "INFO",
+    )
+
+    for text in forbidden:
+        assert text not in all_visible_text
+
+    dialog.name_edit.setText(
+        "Alice Chen"
+    )
+
+    dialog.save_identity_button.click()
+
+    dialog.admin_button.click()
+
+    dialog.relearn_button.click()
+
+    assert (
+        "identity",
+        "Alice Chen",
+        "Sales Manager",
+        "Example Co.",
+    ) in calls
+
+    assert (
+        "admin",
+    ) in calls
+
+    assert (
+        "relearn",
+    ) in calls
+
+    dialog.close()
