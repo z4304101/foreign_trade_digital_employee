@@ -187,12 +187,32 @@ def fetch_folder_raw_emails(
                 f"in read-only mode: {mailbox}"
             )
 
+        english_months = (
+            "",
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        )
+
+        imap_since = (
+            f"{since.day:02d}-"
+            f"{english_months[since.month]}-"
+            f"{since.year:04d}"
+        )
+
         status, data = client.search(
             None,
             "SINCE",
-            since.strftime(
-                "%d-%b-%Y"
-            ),
+            imap_since,
         )
 
         if status != "OK":
