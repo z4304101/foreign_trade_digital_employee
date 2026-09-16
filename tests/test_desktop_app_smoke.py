@@ -424,3 +424,209 @@ def test_desktop_application_controls_scheduler():
         "skipped": 0,
         "failed": 0,
     }
+
+
+
+def test_onboarding_window_requires_history_before_completion():
+    from desktop.ui.onboarding_window import OnboardingWindow
+
+    app = (
+        QApplication.instance()
+        or QApplication([])
+    )
+
+    calls = []
+
+    class Summary:
+        failed = 0
+
+    window = OnboardingWindow(
+        on_test_mail=lambda email, auth: True,
+        on_save_identity=lambda name, title, company: (
+            calls.append(
+                (
+                    "identity",
+                    name,
+                    title,
+                    company,
+                )
+            )
+        ),
+        is_ai_configured=lambda: True,
+        on_test_wecom=lambda webhook: True,
+        on_learn_history=lambda: Summary(),
+        on_complete=lambda: calls.append(
+            ("complete",)
+        ),
+    )
+
+    assert window.stack.currentIndex() == 0
+
+    #
+    # History learning is a hard gate.
+    #
+    assert window.finish_button.isEnabled() is False
+
+    #
+    # Step 1: mailbox
+    #
+    window.email_edit.setText(
+        "sales@163.com"
+    )
+
+    window.auth_code_edit.setText(
+        "secret"
+    )
+
+    window.test_mail_button.click()
+
+    assert (
+        window.email_status_label.text()
+        == "邮箱连接正常"
+    )
+
+    assert (
+        window.email_next_button.isEnabled()
+        is True
+    )
+
+    window.email_next_button.click()
+
+    assert window.stack.currentIndex() == 1
+
+    #
+    # Step 2: identity
+    #
+    window.name_edit.setText(
+        "Alice"
+    )
+
+    window.title_edit.setText(
+        "Sales Manager"
+    )
+
+    window.company_edit.setText(
+        "Example Co."
+    )
+
+    window.identity_next_button.click()
+
+    assert window.stack.currentIndex() == 2
+
+    #
+    # Step 3: AI
+    #
+    assert (
+        window.ai_status_label.text()
+        == "AI 服务已配置"
+    )
+
+    assert (
+        window.ai_next_button.isEnabled()
+        is True
+    )
+
+    window.ai_next_button.click()
+
+    assert window.stack.currentIndex() == 3
+
+    #
+    # Step 4: WeCom
+    #
+    window.wecom_edit.setText(
+        "https://example.invalid/hook"
+    )
+
+    window.test_wecom_button.click()
+
+    assert (
+        window.wecom_status_label.text()
+        == "企业微信已连接"
+    )
+
+    assert (
+        window.wecom_next_button.isEnabled()
+        is True
+    )
+
+    window.wecom_next_button.click()
+
+    assert window.stack.currentIndex() == 4
+
+    #
+    # Step 5: history learning
+    #
+    description = (
+        window.history_description.text()
+    )
+
+    assert "历史邮件只用于学习" in description
+    assert "1000" not in description
+    assert "6 months" not in description
+
+    assert (
+        window.finish_button.isEnabled()
+        is False
+    )
+
+    window.learn_history_button.click()
+
+    assert (
+        window.history_status_label.text()
+        == "历史学习已完成"
+    )
+
+    assert (
+        window.finish_button.isEnabled()
+        is True
+    )
+
+    window.finish_button.click()
+
+    assert calls[-1] == (
+        "complete",
+    )
+
+    window.close()
+
+
+def test_onboarding_history_failure_keeps_finish_locked():
+    from desktop.ui.onboarding_window import OnboardingWindow
+
+    app = (
+        QApplication.instance()
+        or QApplication([])
+    )
+
+    class Summary:
+        failed = 1
+
+    window = OnboardingWindow(
+        on_test_mail=lambda email, auth: True,
+        on_save_identity=lambda name, title, company: None,
+        is_ai_configured=lambda: True,
+        on_test_wecom=lambda webhook: True,
+        on_learn_history=lambda: Summary(),
+        on_complete=lambda: None,
+    )
+
+    window.stack.setCurrentIndex(4)
+
+    window.learn_history_button.click()
+
+    assert (
+        window.finish_button.isEnabled()
+        is False
+    )
+
+    assert (
+        window.learn_history_button.isEnabled()
+        is True
+    )
+
+    assert (
+        window.history_status_label.text()
+        == "历史学习未完成，请重试"
+    )
+
+    window.close()
