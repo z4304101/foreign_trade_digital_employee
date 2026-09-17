@@ -216,3 +216,83 @@ def test_admin_unlock_dialog_uses_six_digit_pin():
     assert unlocked == [
         "yes",
     ]
+
+
+def test_onboarding_includes_pin_before_history_learning():
+    from desktop.ui.onboarding_window import OnboardingWindow
+
+    app = (
+        QApplication.instance()
+        or QApplication([])
+    )
+
+    created = []
+
+    class Summary:
+        failed = 0
+
+    window = OnboardingWindow(
+        on_test_mail=lambda email, auth: True,
+        on_save_identity=lambda name, title, company: None,
+        is_ai_configured=lambda: True,
+        on_test_wecom=lambda webhook: True,
+        on_create_pin=lambda value: created.append(value),
+        on_learn_history=lambda: Summary(),
+        on_complete=lambda: None,
+    )
+
+    assert window.STEP_NAMES == (
+        "邮箱",
+        "身份",
+        "AI",
+        "企业微信",
+        "管理员 PIN",
+        "学习",
+    )
+
+    window.stack.setCurrentIndex(4)
+
+    assert (
+        window.pin_next_button.isEnabled()
+        is False
+    )
+
+    window.pin_edit.setText(
+        "246810"
+    )
+
+    window.confirm_pin_edit.setText(
+        "111111"
+    )
+
+    assert (
+        window.pin_next_button.isEnabled()
+        is False
+    )
+
+    assert (
+        window.pin_status_label.text()
+        == "两次输入的 PIN 不一致"
+    )
+
+    window.confirm_pin_edit.setText(
+        "246810"
+    )
+
+    assert (
+        window.pin_next_button.isEnabled()
+        is True
+    )
+
+    window.pin_next_button.click()
+
+    assert created == [
+        "246810",
+    ]
+
+    assert (
+        window.stack.currentIndex()
+        == 5
+    )
+
+    window.close()

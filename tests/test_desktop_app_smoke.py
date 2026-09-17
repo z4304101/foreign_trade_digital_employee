@@ -488,6 +488,12 @@ def test_onboarding_window_requires_history_before_completion():
         ),
         is_ai_configured=lambda: True,
         on_test_wecom=lambda webhook: True,
+        on_create_pin=lambda value: calls.append(
+            (
+                "pin",
+                value,
+            )
+        ),
         on_learn_history=lambda: Summary(),
         on_complete=lambda: calls.append(
             ("complete",)
@@ -588,7 +594,35 @@ def test_onboarding_window_requires_history_before_completion():
     assert window.stack.currentIndex() == 4
 
     #
-    # Step 5: history learning
+    # Step 5: administrator PIN
+    #
+    window.pin_edit.setText(
+        "246810"
+    )
+
+    window.confirm_pin_edit.setText(
+        "246810"
+    )
+
+    assert (
+        window.pin_next_button.isEnabled()
+        is True
+    )
+
+    window.pin_next_button.click()
+
+    assert (
+        window.stack.currentIndex()
+        == 5
+    )
+
+    assert (
+        "pin",
+        "246810",
+    ) in calls
+
+    #
+    # Step 6: history learning
     #
     description = (
         window.history_description.text()
@@ -640,11 +674,12 @@ def test_onboarding_history_failure_keeps_finish_locked():
         on_save_identity=lambda name, title, company: None,
         is_ai_configured=lambda: True,
         on_test_wecom=lambda webhook: True,
+        on_create_pin=lambda value: None,
         on_learn_history=lambda: Summary(),
         on_complete=lambda: None,
     )
 
-    window.stack.setCurrentIndex(4)
+    window.stack.setCurrentIndex(5)
 
     window.learn_history_button.click()
 

@@ -1,7 +1,13 @@
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import (
+    QRegularExpression,
+    Qt,
+)
+from PySide6.QtGui import (
+    QRegularExpressionValidator,
+)
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -43,6 +49,7 @@ class OnboardingWindow(QMainWindow):
         "身份",
         "AI",
         "企业微信",
+        "管理员 PIN",
         "学习",
     )
 
@@ -73,6 +80,11 @@ class OnboardingWindow(QMainWindow):
             [],
             None,
         ],
+        on_create_pin: Callable[
+            [str],
+            None,
+        ]
+        | None = None,
     ) -> None:
         super().__init__()
 
@@ -90,6 +102,7 @@ class OnboardingWindow(QMainWindow):
             on_learn_history
         )
         self._on_complete = on_complete
+        self._on_create_pin = on_create_pin
 
         self.setWindowTitle(
             "外贸数字员工 · 首次配置"
@@ -237,6 +250,10 @@ class OnboardingWindow(QMainWindow):
 
         self.stack.addWidget(
             self._build_wecom_page()
+        )
+
+        self.stack.addWidget(
+            self._build_pin_page()
         )
 
         self.stack.addWidget(
@@ -1026,7 +1043,277 @@ class OnboardingWindow(QMainWindow):
             )
 
     #
-    # Step 5: History learning
+    # Step 5: Administrator PIN
+    #
+    def _build_pin_page(
+        self,
+    ) -> QWidget:
+        page, layout = self._create_page(
+            "创建管理员 PIN",
+            (
+                "请设置 6 位数字 PIN。"
+                "以后进入高级设置时需要使用这个 PIN。"
+            ),
+        )
+
+        pin_hint = QLabel(
+            (
+                "PIN 不会以明文保存。"
+                "系统只保存经过安全哈希处理后的验证信息。"
+            )
+        )
+
+        pin_hint.setWordWrap(
+            True
+        )
+
+        pin_hint.setProperty(
+            "role",
+            "muted",
+        )
+
+        layout.addWidget(
+            pin_hint
+        )
+
+        validator = (
+            QRegularExpressionValidator(
+                QRegularExpression(
+                    r"[0-9]{0,6}"
+                )
+            )
+        )
+
+        self._add_field_label(
+            layout,
+            "管理员 PIN",
+        )
+
+        self.pin_edit = QLineEdit()
+
+        self.pin_edit.setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+
+        self.pin_edit.setMaxLength(
+            6
+        )
+
+        self.pin_edit.setValidator(
+            validator
+        )
+
+        self.pin_edit.setPlaceholderText(
+            "输入 6 位数字 PIN"
+        )
+
+        layout.addWidget(
+            self.pin_edit
+        )
+
+        self._add_field_label(
+            layout,
+            "确认 PIN",
+        )
+
+        self.confirm_pin_edit = QLineEdit()
+
+        self.confirm_pin_edit.setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+
+        self.confirm_pin_edit.setMaxLength(
+            6
+        )
+
+        self.confirm_pin_edit.setValidator(
+            validator
+        )
+
+        self.confirm_pin_edit.setPlaceholderText(
+            "再次输入 PIN"
+        )
+
+        layout.addWidget(
+            self.confirm_pin_edit
+        )
+
+        self.pin_status_label = QLabel(
+            "请输入并确认 6 位数字 PIN"
+        )
+
+        self.pin_status_label.setProperty(
+            "role",
+            "muted",
+        )
+
+        layout.addWidget(
+            self.pin_status_label
+        )
+
+        actions = self._create_actions(
+            layout
+        )
+
+        back_button = QPushButton(
+            "上一步"
+        )
+
+        back_button.setProperty(
+            "role",
+            "secondary",
+        )
+
+        self.pin_next_button = QPushButton(
+            "创建 PIN 并继续"
+        )
+
+        self.pin_next_button.setProperty(
+            "role",
+            "primary",
+        )
+
+        self.pin_next_button.setEnabled(
+            False
+        )
+
+        back_button.clicked.connect(
+            lambda checked=False: self._set_step(3)
+        )
+
+        self.pin_edit.textChanged.connect(
+            self._refresh_pin_state
+        )
+
+        self.confirm_pin_edit.textChanged.connect(
+            self._refresh_pin_state
+        )
+
+        self.pin_next_button.clicked.connect(
+            self._create_pin
+        )
+
+        actions.addWidget(
+            back_button
+        )
+
+        actions.addWidget(
+            self.pin_next_button
+        )
+
+        return page
+
+    def _refresh_pin_state(
+        self,
+        _text: str = "",
+    ) -> None:
+        pin = self.pin_edit.text()
+        confirmation = (
+            self.confirm_pin_edit.text()
+        )
+
+        pin_complete = (
+            len(pin) == 6
+            and pin.isdigit()
+        )
+
+        confirmation_complete = (
+            len(confirmation) == 6
+            and confirmation.isdigit()
+        )
+
+        if (
+            confirmation
+            and pin != confirmation
+        ):
+            self.pin_status_label.setText(
+                "两次输入的 PIN 不一致"
+            )
+
+            self.pin_status_label.setStyleSheet(
+                f"color: {LIGHT_TOKENS.danger};"
+            )
+
+        elif (
+            pin_complete
+            and confirmation_complete
+            and pin == confirmation
+        ):
+            self.pin_status_label.setText(
+                "PIN 可以创建"
+            )
+
+            self.pin_status_label.setStyleSheet(
+                f"color: {LIGHT_TOKENS.success};"
+            )
+
+        else:
+            self.pin_status_label.setText(
+                "请输入并确认 6 位数字 PIN"
+            )
+
+            self.pin_status_label.setStyleSheet(
+                ""
+            )
+
+        self.pin_next_button.setEnabled(
+            pin_complete
+            and confirmation_complete
+            and pin == confirmation
+        )
+
+    def _create_pin(
+        self,
+        checked: bool = False,
+    ) -> None:
+        del checked
+
+        if not self.pin_next_button.isEnabled():
+            return
+
+        if self._on_create_pin is None:
+            self.pin_status_label.setText(
+                "管理员 PIN 服务尚未配置"
+            )
+
+            self.pin_status_label.setStyleSheet(
+                f"color: {LIGHT_TOKENS.danger};"
+            )
+
+            return
+
+        value = self.pin_edit.text()
+
+        try:
+            self._on_create_pin(
+                value
+            )
+
+        except Exception:
+            self.pin_status_label.setText(
+                "PIN 创建失败，请重试"
+            )
+
+            self.pin_status_label.setStyleSheet(
+                f"color: {LIGHT_TOKENS.danger};"
+            )
+
+            return
+
+        self.pin_status_label.setText(
+            "管理员 PIN 已创建"
+        )
+
+        self.pin_status_label.setStyleSheet(
+            f"color: {LIGHT_TOKENS.success};"
+        )
+
+        self._set_step(
+            5
+        )
+
+    #
+    # Step 6: History learning
     #
     def _build_history_page(
         self,
@@ -1172,7 +1459,7 @@ class OnboardingWindow(QMainWindow):
         )
 
         back_button.clicked.connect(
-            lambda checked=False: self._set_step(3)
+            lambda checked=False: self._set_step(4)
         )
 
         self.learn_history_button.clicked.connect(
