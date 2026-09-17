@@ -360,3 +360,73 @@ def test_onboarding_places_pin_before_ai_and_exposes_admin_ai_configuration():
     )
 
     window.close()
+
+
+def test_onboarding_back_navigation_matches_new_step_order():
+    from PySide6.QtWidgets import QPushButton
+
+    from desktop.ui.onboarding_window import OnboardingWindow
+
+    app = (
+        QApplication.instance()
+        or QApplication([])
+    )
+
+    class Summary:
+        failed = 0
+
+    window = OnboardingWindow(
+        on_test_mail=lambda email, auth: True,
+        on_save_identity=lambda name, title, company: None,
+        is_ai_configured=lambda: True,
+        on_test_wecom=lambda webhook: True,
+        on_create_pin=lambda value: None,
+        on_configure_ai=lambda: None,
+        on_learn_history=lambda: Summary(),
+        on_complete=lambda: None,
+    )
+
+    def find_button(page, text):
+        return next(
+            button
+            for button in page.findChildren(QPushButton)
+            if button.text() == text
+        )
+
+    #
+    # AI is step index 3.
+    # Its back button must return to PIN index 2.
+    #
+    window.stack.setCurrentIndex(3)
+
+    ai_back = find_button(
+        window.stack.currentWidget(),
+        "上一步",
+    )
+
+    ai_back.click()
+
+    assert (
+        window.stack.currentIndex()
+        == 2
+    )
+
+    #
+    # WeCom is step index 4.
+    # Its back button must return to AI index 3.
+    #
+    window.stack.setCurrentIndex(4)
+
+    wecom_back = find_button(
+        window.stack.currentWidget(),
+        "上一步",
+    )
+
+    wecom_back.click()
+
+    assert (
+        window.stack.currentIndex()
+        == 3
+    )
+
+    window.close()

@@ -840,7 +840,7 @@ class OnboardingWindow(QMainWindow):
         )
 
         back_button.clicked.connect(
-            lambda checked=False: self._set_step(3)
+            lambda checked=False: self._set_step(2)
         )
 
         self.ai_next_button.clicked.connect(
@@ -1006,7 +1006,7 @@ class OnboardingWindow(QMainWindow):
         )
 
         back_button.clicked.connect(
-            lambda checked=False: self._set_step(2)
+            lambda checked=False: self._set_step(3)
         )
 
         self.test_wecom_button.clicked.connect(
