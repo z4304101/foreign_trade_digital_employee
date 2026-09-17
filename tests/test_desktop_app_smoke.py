@@ -917,3 +917,38 @@ def test_desktop_application_routes_first_run_through_onboarding():
     desktop.on_onboarding_complete()
 
     assert scheduler.start_calls == 1
+
+
+
+def test_apply_theme_hook_runs_before_desktop_show():
+    from desktop import app as app_module
+
+    calls = []
+
+    original = app_module.apply_light_theme
+
+    try:
+        app_module.apply_light_theme = (
+            lambda qapp: calls.append(
+                "theme"
+            )
+        )
+
+        class FakeDesktop:
+            def show(self):
+                calls.append(
+                    "show"
+                )
+
+        app_module.prepare_desktop_ui(
+            qapp=object(),
+            desktop=FakeDesktop(),
+        )
+
+        assert calls == [
+            "theme",
+            "show",
+        ]
+
+    finally:
+        app_module.apply_light_theme = original

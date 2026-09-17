@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from typing import Protocol
 
+from desktop.ui.theme import apply_light_theme
+
 
 class WindowLike(Protocol):
     def show(self) -> None:
@@ -22,6 +24,23 @@ class SchedulerLike(Protocol):
 
     def run_now(self):
         ...
+
+
+def prepare_desktop_ui(
+    *,
+    qapp,
+    desktop,
+) -> None:
+    """
+    Apply the global desktop theme before showing
+    onboarding, dashboard, or settings windows.
+    """
+
+    apply_light_theme(
+        qapp
+    )
+
+    desktop.show()
 
 
 class DesktopApplication:
