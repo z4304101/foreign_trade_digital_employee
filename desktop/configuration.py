@@ -51,6 +51,15 @@ class DesktopConfiguration:
             credentials
         )
 
+    def reload(
+        self,
+    ) -> DesktopSettings:
+        self.settings = (
+            self.settings_store.load()
+        )
+
+        return self.settings
+
     def save_settings(
         self,
         settings: DesktopSettings,
