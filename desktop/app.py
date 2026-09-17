@@ -28,11 +28,12 @@ class DesktopApplication:
     """
     Top-level desktop application controller.
 
-    Before the onboarding / baseline production gate
-    is ready, only the onboarding window may be shown.
+    Production remains closed until the onboarding /
+    baseline gate is ready.
 
-    After the gate is ready, the dashboard is shown and
-    the scheduler is started at most once.
+    Normal settings may be opened from the dashboard,
+    while advanced settings remain protected by their
+    own administrator-authentication gate.
     """
 
     def __init__(
@@ -41,12 +42,29 @@ class DesktopApplication:
         dashboard_window: WindowLike,
         onboarding_window: WindowLike,
         scheduler: SchedulerLike,
-        ready_check: Callable[[], bool],
+        ready_check: Callable[
+            [],
+            bool,
+        ],
+        settings_window: WindowLike | None = None,
     ) -> None:
-        self.dashboard_window = dashboard_window
-        self.onboarding_window = onboarding_window
+        self.dashboard_window = (
+            dashboard_window
+        )
+
+        self.onboarding_window = (
+            onboarding_window
+        )
+
+        self.settings_window = (
+            settings_window
+        )
+
         self.scheduler = scheduler
-        self.ready_check = ready_check
+
+        self.ready_check = (
+            ready_check
+        )
 
         self._scheduler_started = False
 
@@ -56,7 +74,9 @@ class DesktopApplication:
         if self._scheduler_started:
             return
 
-        started = self.scheduler.start()
+        started = (
+            self.scheduler.start()
+        )
 
         if started:
             self._scheduler_started = True
@@ -74,17 +94,22 @@ class DesktopApplication:
     def on_onboarding_complete(
         self,
     ) -> None:
-        #
-        # Never open production mode merely because the
-        # user clicked a UI button. The safety gate must
-        # actually be ready.
-        #
         if not self.ready_check():
             return
 
         self.onboarding_window.hide()
+
         self.dashboard_window.show()
+
         self._start_scheduler_once()
+
+    def open_settings(
+        self,
+    ) -> None:
+        if self.settings_window is None:
+            return
+
+        self.settings_window.show()
 
     def pause(
         self,
