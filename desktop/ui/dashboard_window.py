@@ -55,6 +55,8 @@ class DashboardWindow(QMainWindow):
         self._on_run_now = on_run_now
         self._on_settings = on_settings
 
+        self._close_to_tray_enabled = False
+
         self._current_status = (
             AppStatus.WAITING_INITIALIZATION
         )
@@ -685,6 +687,27 @@ class DashboardWindow(QMainWindow):
 
         self.setCentralWidget(
             central_widget
+        )
+
+    def set_close_to_tray(
+        self,
+        enabled: bool = True,
+    ) -> None:
+        self._close_to_tray_enabled = bool(
+            enabled
+        )
+
+    def closeEvent(
+        self,
+        event,
+    ) -> None:
+        if self._close_to_tray_enabled:
+            event.ignore()
+            self.hide()
+            return
+
+        super().closeEvent(
+            event
         )
 
     def _handle_pause_resume_clicked(
