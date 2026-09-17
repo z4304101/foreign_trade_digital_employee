@@ -1,5 +1,7 @@
 from collections.abc import Callable
 
+from PySide6.QtCore import QRegularExpression
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -10,17 +12,15 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.ui.components import Card
-from desktop.ui.theme import (
-    LIGHT_TOKENS,
-)
+from desktop.ui.theme import LIGHT_TOKENS
 
 
 class AdminUnlockDialog(QDialog):
     """
-    Small administrator authentication gate.
+    Administrator six-digit PIN gate.
 
-    The password is passed to a verification callback
-    and is never persisted by the UI.
+    The PIN is passed to the verification callback and
+    is never persisted by the UI.
     """
 
     def __init__(
@@ -109,7 +109,7 @@ class AdminUnlockDialog(QDialog):
 
         description = QLabel(
             "高级设置可能影响邮箱、AI 和自动处理流程。"
-            "请输入管理员密码继续。"
+            "请输入 6 位管理员 PIN 继续。"
         )
 
         description.setWordWrap(
@@ -121,14 +121,34 @@ class AdminUnlockDialog(QDialog):
             "muted",
         )
 
-        self.password_edit = QLineEdit()
+        self.pin_edit = QLineEdit()
 
-        self.password_edit.setEchoMode(
+        self.pin_edit.setEchoMode(
             QLineEdit.EchoMode.Password
         )
 
-        self.password_edit.setPlaceholderText(
-            "管理员密码"
+        self.pin_edit.setMaxLength(
+            6
+        )
+
+        self.pin_edit.setValidator(
+            QRegularExpressionValidator(
+                QRegularExpression(
+                    r"[0-9]{0,6}"
+                )
+            )
+        )
+
+        self.pin_edit.setPlaceholderText(
+            "6 位管理员 PIN"
+        )
+
+        #
+        # Temporary compatibility for any old UI test or
+        # integration still referring to password_edit.
+        #
+        self.password_edit = (
+            self.pin_edit
         )
 
         self.status_label = QLabel(
@@ -167,7 +187,7 @@ class AdminUnlockDialog(QDialog):
             self._unlock
         )
 
-        self.password_edit.returnPressed.connect(
+        self.pin_edit.returnPressed.connect(
             self._unlock
         )
 
@@ -192,7 +212,7 @@ class AdminUnlockDialog(QDialog):
         )
 
         layout.addWidget(
-            self.password_edit
+            self.pin_edit
         )
 
         layout.addWidget(
@@ -217,30 +237,45 @@ class AdminUnlockDialog(QDialog):
     ) -> None:
         del checked
 
-        password = (
-            self.password_edit.text()
+        value = (
+            self.pin_edit.text()
         )
 
-        try:
-            success = bool(
-                self._on_verify(
-                    password
-                )
-            )
-        except Exception:
-            success = False
-
-        if not success:
+        if (
+            len(value) != 6
+            or not value.isdigit()
+        ):
             self.status_label.setText(
-                "管理员密码错误"
+                "请输入 6 位管理员 PIN"
             )
 
             self.status_label.setStyleSheet(
                 f"color: {LIGHT_TOKENS.danger};"
             )
 
-            self.password_edit.selectAll()
-            self.password_edit.setFocus()
+            return
+
+        try:
+            success = bool(
+                self._on_verify(
+                    value
+                )
+            )
+
+        except Exception:
+            success = False
+
+        if not success:
+            self.status_label.setText(
+                "管理员 PIN 错误"
+            )
+
+            self.status_label.setStyleSheet(
+                f"color: {LIGHT_TOKENS.danger};"
+            )
+
+            self.pin_edit.selectAll()
+            self.pin_edit.setFocus()
 
             return
 
