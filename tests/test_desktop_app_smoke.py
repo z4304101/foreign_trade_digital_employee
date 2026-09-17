@@ -554,7 +554,35 @@ def test_onboarding_window_requires_history_before_completion():
     assert window.stack.currentIndex() == 2
 
     #
-    # Step 3: AI
+    # Step 3: administrator PIN
+    #
+    window.pin_edit.setText(
+        "246810"
+    )
+
+    window.confirm_pin_edit.setText(
+        "246810"
+    )
+
+    assert (
+        window.pin_next_button.isEnabled()
+        is True
+    )
+
+    window.pin_next_button.click()
+
+    assert (
+        window.stack.currentIndex()
+        == 3
+    )
+
+    assert (
+        "pin",
+        "246810",
+    ) in calls
+
+    #
+    # Step 4: AI
     #
     assert (
         window.ai_status_label.text()
@@ -568,10 +596,10 @@ def test_onboarding_window_requires_history_before_completion():
 
     window.ai_next_button.click()
 
-    assert window.stack.currentIndex() == 3
+    assert window.stack.currentIndex() == 4
 
     #
-    # Step 4: WeCom
+    # Step 5: WeCom
     #
     window.wecom_edit.setText(
         "https://example.invalid/hook"
@@ -591,35 +619,7 @@ def test_onboarding_window_requires_history_before_completion():
 
     window.wecom_next_button.click()
 
-    assert window.stack.currentIndex() == 4
-
-    #
-    # Step 5: administrator PIN
-    #
-    window.pin_edit.setText(
-        "246810"
-    )
-
-    window.confirm_pin_edit.setText(
-        "246810"
-    )
-
-    assert (
-        window.pin_next_button.isEnabled()
-        is True
-    )
-
-    window.pin_next_button.click()
-
-    assert (
-        window.stack.currentIndex()
-        == 5
-    )
-
-    assert (
-        "pin",
-        "246810",
-    ) in calls
+    assert window.stack.currentIndex() == 5
 
     #
     # Step 6: history learning

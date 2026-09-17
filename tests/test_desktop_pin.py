@@ -244,13 +244,13 @@ def test_onboarding_includes_pin_before_history_learning():
     assert window.STEP_NAMES == (
         "邮箱",
         "身份",
+        "管理员 PIN",
         "AI",
         "企业微信",
-        "管理员 PIN",
         "学习",
     )
 
-    window.stack.setCurrentIndex(4)
+    window.stack.setCurrentIndex(2)
 
     assert (
         window.pin_next_button.isEnabled()
@@ -292,7 +292,71 @@ def test_onboarding_includes_pin_before_history_learning():
 
     assert (
         window.stack.currentIndex()
-        == 5
+        == 3
+    )
+
+    window.close()
+
+
+def test_onboarding_places_pin_before_ai_and_exposes_admin_ai_configuration():
+    from desktop.ui.onboarding_window import OnboardingWindow
+
+    app = (
+        QApplication.instance()
+        or QApplication([])
+    )
+
+    configured = {
+        "value": False,
+    }
+
+    calls = []
+
+    class Summary:
+        failed = 0
+
+    def configure_ai():
+        calls.append("configure_ai")
+        configured["value"] = True
+
+    window = OnboardingWindow(
+        on_test_mail=lambda email, auth: True,
+        on_save_identity=lambda name, title, company: None,
+        is_ai_configured=lambda: configured["value"],
+        on_test_wecom=lambda webhook: True,
+        on_create_pin=lambda value: None,
+        on_configure_ai=configure_ai,
+        on_learn_history=lambda: Summary(),
+        on_complete=lambda: None,
+    )
+
+    assert window.STEP_NAMES == (
+        "邮箱",
+        "身份",
+        "管理员 PIN",
+        "AI",
+        "企业微信",
+        "学习",
+    )
+
+    window.stack.setCurrentIndex(3)
+
+    assert window.ai_next_button.isEnabled() is False
+
+    window.configure_ai_button.click()
+
+    assert calls == [
+        "configure_ai",
+    ]
+
+    assert (
+        window.ai_status_label.text()
+        == "AI 服务已配置"
+    )
+
+    assert (
+        window.ai_next_button.isEnabled()
+        is True
     )
 
     window.close()

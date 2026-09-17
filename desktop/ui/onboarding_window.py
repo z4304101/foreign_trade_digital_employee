@@ -47,9 +47,9 @@ class OnboardingWindow(QMainWindow):
     STEP_NAMES = (
         "邮箱",
         "身份",
+        "管理员 PIN",
         "AI",
         "企业微信",
-        "管理员 PIN",
         "学习",
     )
 
@@ -85,6 +85,11 @@ class OnboardingWindow(QMainWindow):
             None,
         ]
         | None = None,
+        on_configure_ai: Callable[
+            [],
+            None,
+        ]
+        | None = None,
     ) -> None:
         super().__init__()
 
@@ -103,6 +108,7 @@ class OnboardingWindow(QMainWindow):
         )
         self._on_complete = on_complete
         self._on_create_pin = on_create_pin
+        self._on_configure_ai = on_configure_ai
 
         self.setWindowTitle(
             "外贸数字员工 · 首次配置"
@@ -245,15 +251,15 @@ class OnboardingWindow(QMainWindow):
         )
 
         self.stack.addWidget(
+            self._build_pin_page()
+        )
+
+        self.stack.addWidget(
             self._build_ai_page()
         )
 
         self.stack.addWidget(
             self._build_wecom_page()
-        )
-
-        self.stack.addWidget(
-            self._build_pin_page()
         )
 
         self.stack.addWidget(
@@ -754,8 +760,6 @@ class OnboardingWindow(QMainWindow):
             self.company_edit.text().strip(),
         )
 
-        self._refresh_ai_status()
-
         self._set_step(
             2
         )
@@ -836,15 +840,32 @@ class OnboardingWindow(QMainWindow):
         )
 
         back_button.clicked.connect(
-            lambda checked=False: self._set_step(1)
+            lambda checked=False: self._set_step(3)
         )
 
         self.ai_next_button.clicked.connect(
-            lambda checked=False: self._set_step(3)
+            lambda checked=False: self._set_step(4)
+        )
+
+        self.configure_ai_button = QPushButton(
+            "管理员配置 AI"
+        )
+
+        self.configure_ai_button.setProperty(
+            "role",
+            "secondary",
+        )
+
+        self.configure_ai_button.clicked.connect(
+            self._configure_ai
         )
 
         actions.addWidget(
             back_button
+        )
+
+        actions.addWidget(
+            self.configure_ai_button
         )
 
         actions.addWidget(
@@ -854,6 +875,19 @@ class OnboardingWindow(QMainWindow):
         self._refresh_ai_status()
 
         return page
+
+    def _configure_ai(
+        self,
+        checked: bool = False,
+    ) -> None:
+        del checked
+
+        if self._on_configure_ai is None:
+            return
+
+        self._on_configure_ai()
+
+        self._refresh_ai_status()
 
     def _refresh_ai_status(
         self,
@@ -980,7 +1014,7 @@ class OnboardingWindow(QMainWindow):
         )
 
         self.wecom_next_button.clicked.connect(
-            lambda checked=False: self._set_step(4)
+            lambda checked=False: self._set_step(5)
         )
 
         actions.addWidget(
@@ -1178,7 +1212,7 @@ class OnboardingWindow(QMainWindow):
         )
 
         back_button.clicked.connect(
-            lambda checked=False: self._set_step(3)
+            lambda checked=False: self._set_step(1)
         )
 
         self.pin_edit.textChanged.connect(
@@ -1308,8 +1342,10 @@ class OnboardingWindow(QMainWindow):
             f"color: {LIGHT_TOKENS.success};"
         )
 
+        self._refresh_ai_status()
+
         self._set_step(
-            5
+            3
         )
 
     #
