@@ -1,0 +1,6 @@
+# Runtime dependencies
+openai>=1.0,<3
+python-dotenv>=1.0,<2
+
+# Test dependency
+pytest>=8.0,<10
