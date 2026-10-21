@@ -6,10 +6,11 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/Tests-pytest-informational)](https://docs.pytest.org/)
 [![Status](https://img.shields.io/badge/Status-early--stage-orange)](#project-status--项目现状)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 > **Project scope / 项目定位**  
-> This repository contains a Python-based email processing and history-learning engine. It is **not** a packaged desktop application and does **not** send customer emails automatically. Its source code is public; a redistribution license has **not yet been selected**.  
-> 当前公开仓库为 Python 邮件处理与历史学习引擎，**不包含可直接安装的桌面安装包**，也**不会自动发送客户邮件**。目前尚未正式添加开源许可证。
+> This repository contains a Python-based email processing and history-learning engine. It is **not** a packaged desktop application and does **not** send customer emails automatically. The original code in this repository is distributed under the [MIT License](LICENSE); third-party dependencies remain under their own licenses.  
+> 当前公开仓库为 Python 邮件处理与历史学习引擎，**不包含可直接安装的桌面安装包**，也**不会自动发送客户邮件**。本仓库原创代码已采用 [MIT 开源许可证](LICENSE)，第三方依赖遵循各自许可。
 
 ## Features | 功能
 
@@ -128,8 +129,8 @@ Issues describing reproducible problems and small, focused improvements are welc
 
 ## Licensing and attribution | 授权与署名
 
-**A LICENSE file has not yet been published for this repository.** Public source visibility alone does not grant a right to copy, modify or redistribute the code. An explicit license (such as MIT or Apache-2.0) will be added after the rights holder confirms the ownership and licensing choice. Existing third-party dependencies retain their own licenses.
+**License: [MIT](LICENSE).** Copyright (c) 2026 z4304101. The original project code and documentation in this repository may be used, modified and redistributed under the MIT License provided the copyright notice and license are retained. Third-party packages, APIs and dependencies remain subject to their own licenses.
 
-**本仓库尚未发布 LICENSE。** Public 仅代表代码公开可见，并不自动赋予其他人复制、修改和再分发的权利。待核实代码版权归属并明确选定许可证后，再正式发布 MIT、Apache-2.0 等许可。第三方依赖仍遵循各自许可证。
+**本仓库采用 [MIT License](LICENSE)。** 原创代码及文档允许在保留版权声明及许可证的前提下使用、修改及再分发；第三方 SDK、依赖、服务与其他人的内容仍遵守各自许可。本仓库的代码由维护者自行开发，并在后期使用 Codex 等 AI 编码工具辅助开发及测试。
 
 Maintained in [z4304101/foreign_trade_digital_employee](https://github.com/z4304101/foreign_trade_digital_employee). / 项目维护地址如上。
